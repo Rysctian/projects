@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { UserRound } from '@lucide/vue';
+import FormSurface from '@/components/astreia/FormSurface.vue';
 import { useForm } from '@inertiajs/vue3';
 import FormErrors from '@/components/astreia/FormErrors.vue';
 import { Button } from '@/components/ui/button';
@@ -24,23 +26,35 @@ const overrides = useForm({
 });
 </script>
 <template>
-    <details class="rounded-lg border p-4">
-        <summary>
-            <span class="inline-flex flex-wrap items-center gap-2"
-                >{{ member.user.name
-                }}<Badge v-if="!member.is_active" variant="secondary"
-                    >Inactive</Badge
-                ><span class="text-xs font-normal text-muted-foreground">{{
-                    member.user.email
-                }}</span></span
+    <FormSurface
+        :title="member.user.name"
+        description="Manage this person's project membership, roles, and permission overrides."
+        mode="drawer"
+    >
+        <template #trigger
+            ><Button
+                variant="outline"
+                class="h-auto w-full justify-start gap-3 p-4 text-left"
             >
-        </summary>
-        <p class="mt-2 text-xs text-muted-foreground">
-            {{
-                member.roles.map((role) => role.name).join(' · ') ||
-                'No roles assigned'
-            }}
-        </p>
+                <span
+                    class="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/8 text-primary"
+                    ><UserRound class="size-4"
+                /></span>
+                <span class="min-w-0 flex-1"
+                    ><span class="block truncate">{{ member.user.name }}</span
+                    ><span
+                        class="mt-1 block truncate text-xs font-normal text-muted-foreground"
+                        >{{ member.user.email }}</span
+                    ></span
+                >
+                <Badge :variant="member.is_active ? 'secondary' : 'outline'">{{
+                    member.is_active
+                        ? member.roles.map((role) => role.name).join(', ') ||
+                          'No roles'
+                        : 'Inactive'
+                }}</Badge>
+            </Button></template
+        >
         <form
             class="mt-4 space-y-4"
             @submit.prevent="
@@ -52,7 +66,7 @@ const overrides = useForm({
             <FormErrors :errors="form.errors" />
             <fieldset>
                 <legend class="mb-2 text-sm font-medium">Project roles</legend>
-                <div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                <div class="grid gap-2 sm:grid-cols-2">
                     <label
                         v-for="role in roles"
                         :key="role.id"
@@ -166,5 +180,5 @@ const overrides = useForm({
                 >
             </div>
         </form>
-    </details>
+    </FormSurface>
 </template>

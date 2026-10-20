@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { Head, Link } from '@inertiajs/vue3';
+import { ArrowLeft } from '@lucide/vue';
 defineProps<{
     title: string;
     eyebrow?: string;
@@ -12,28 +13,31 @@ defineProps<{
 <template>
     <Head :title="title" />
     <main
-        class="astreia mx-auto w-full max-w-[1600px] space-y-6 p-4 sm:p-6 lg:p-8"
+        class="astreia mx-auto w-full max-w-[1800px] space-y-7 p-4 sm:p-7 lg:p-10"
     >
-        <header class="flex flex-wrap items-start justify-between gap-4">
+        <header class="flex flex-wrap items-center justify-between gap-5">
             <div class="min-w-0 space-y-1.5">
                 <Link
                     v-if="back"
                     :href="back"
-                    class="text-xs text-muted-foreground hover:text-foreground"
-                    >← {{ backLabel ?? 'Back to project' }}</Link
+                    class="mb-4 inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+                    ><ArrowLeft class="size-3.5" />
+                    {{ backLabel ?? 'Back to project' }}</Link
                 >
                 <p
                     v-if="eyebrow"
-                    class="text-xs font-semibold tracking-widest text-muted-foreground uppercase"
+                    class="mb-2 text-[10px] font-semibold tracking-[0.16em] text-muted-foreground uppercase"
                 >
                     {{ eyebrow }}
                 </p>
-                <h1 class="text-2xl font-semibold tracking-tight">
+                <h1
+                    class="text-2xl font-semibold tracking-[-0.035em] sm:text-3xl"
+                >
                     {{ title }}
                 </h1>
                 <p
                     v-if="description"
-                    class="max-w-3xl text-sm text-muted-foreground"
+                    class="max-w-2xl text-sm leading-relaxed text-muted-foreground"
                 >
                     {{ description }}
                 </p>
@@ -52,6 +56,7 @@ defineProps<{
     border-radius: 0.75rem;
     background: var(--card);
     padding: 1.25rem;
+    box-shadow: 0 1px 2px rgb(0 0 0 / 0.025);
 }
 .astreia .section-title {
     font-size: 0.95rem;

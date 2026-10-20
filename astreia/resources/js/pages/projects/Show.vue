@@ -1,12 +1,27 @@
 <script setup lang="ts">
 import { Link, router, useForm } from '@inertiajs/vue3';
-import { ref } from 'vue';
-import { Plus, Settings, Workflow, List, Columns3, Search } from '@lucide/vue';
+import { computed, ref } from 'vue';
+import {
+    Plus,
+    Settings,
+    Workflow,
+    List,
+    Columns3,
+    Search,
+    SlidersHorizontal,
+    CircleDot,
+    Ban,
+    Clock3,
+    CircleCheck,
+    X,
+} from '@lucide/vue';
 import PageFrame from '@/components/astreia/PageFrame.vue';
 import FormErrors from '@/components/astreia/FormErrors.vue';
 import Pagination from '@/components/astreia/Pagination.vue';
 import TicketBadges from '@/components/astreia/TicketBadges.vue';
 import TicketFields from '@/components/astreia/TicketFields.vue';
+import FormSurface from '@/components/astreia/FormSurface.vue';
+import TicketKanban from './TicketKanban.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -55,7 +70,20 @@ const props = defineProps<{
 }>();
 const base = `/projects/${props.project.id}`;
 const creating = ref(false);
-const board = ref(props.filters.view === 'board');
+const board = computed(() => props.filters.view === 'board');
+const filtering = ref(false);
+const activeFilters = computed(
+    () =>
+        Object.entries(props.filters).filter(
+            ([key, value]) => key !== 'view' && value !== '' && value != null,
+        ).length,
+);
+const metricIcons = {
+    open: CircleDot,
+    blocked: Ban,
+    overdue: Clock3,
+    closed: CircleCheck,
+};
 const form = useForm({
     title: '',
     description: '',
@@ -79,7 +107,12 @@ const filter = useForm({
     view: props.filters.view ?? 'list',
 });
 function setView(view: 'list' | 'board') {
-    router.get(base, { ...filter.data(), view }, { preserveScroll: true });
+    filter.view = view;
+    router.get(
+        base,
+        { ...props.filters, view },
+        { preserveScroll: true, preserveState: true },
+    );
 }
 function quickIntake() {
     if (form.is_intake_stub) {
@@ -110,7 +143,22 @@ function search() {
         preserveState: true,
         preserveScroll: true,
         replace: true,
+        onSuccess: () => {
+            filtering.value = false;
+        },
     });
+}
+function clearFilters() {
+    filter.reset();
+    filter.q = '';
+    filter.category = '';
+    filter.priority = '';
+    filter.stage_id = '';
+    filter.assigned_to = '';
+    filter.module_id = '';
+    filter.due = '';
+    filter.view = board.value ? 'board' : 'list';
+    search();
 }
 </script>
 <template>
@@ -144,11 +192,76 @@ function search() {
                     ><Settings class="size-4" />Settings</Link
                 ></Button
             >
-            <Button
+            <FormSurface
                 v-if="capabilities['tickets.create']"
-                @click="creating = !creating"
-                ><Plus class="size-4" />New ticket</Button
+                v-model:open="creating"
+                title="New ticket"
+                description="Give the work a little context. Your team's next step starts here."
+                mode="drawer"
+                :busy="form.processing"
             >
+                <template #trigger
+                    ><Button
+                        ><Plus class="size-4" />New ticket</Button
+                    ></template
+                >
+                <form class="space-y-5" @submit.prevent="create">
+                    <label
+                        class="flex items-center justify-between gap-3 rounded-lg border bg-muted/40 p-3 text-xs"
+                    >
+                        <span
+                            ><span class="block font-medium"
+                                >Urgent support intake</span
+                            ><span class="mt-1 block text-muted-foreground"
+                                >Issue a ticket key now, add the details
+                                later.</span
+                            ></span
+                        >
+                        <input
+                            v-model="form.is_intake_stub"
+                            type="checkbox"
+                            @change="quickIntake"
+                        />
+                    </label>
+                    <p
+                        v-if="form.is_intake_stub"
+                        class="rounded-md bg-amber-500/10 p-3 text-xs"
+                    >
+                        Incomplete intake cannot leave its initial stage until
+                        the required details are added.
+                    </p>
+                    <FormErrors :errors="form.errors" />
+                    <TicketFields
+                        :form="form"
+                        :categories="categories"
+                        :priorities="priorities"
+                        :modules="modules"
+                        :assignees="eligibleAssignees"
+                        editable
+                        :assignable="!!capabilities['tickets.assign']"
+                        :incomplete="form.is_intake_stub"
+                    />
+                    <div
+                        class="flex items-center justify-end gap-2 border-t pt-4"
+                    >
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            @click="creating = false"
+                            >Cancel</Button
+                        >
+                        <Button :disabled="form.processing"
+                            ><Plus class="size-4" />{{
+                                form.processing
+                                    ? 'Creating…'
+                                    : form.is_intake_stub
+                                      ? 'Issue urgent ticket key'
+                                      : 'Create ticket'
+                            }}</Button
+                        >
+                    </div>
+                </form>
+            </FormSurface>
         </template>
         <div
             v-if="project.status === 'archived'"
@@ -158,64 +271,43 @@ function search() {
             permissions.
         </div>
         <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <div v-for="(count, key) in counts" :key="key" class="panel !py-4">
-                <p class="text-xs text-muted-foreground capitalize">
-                    {{ key }}
-                </p>
-                <p class="mt-1 text-2xl font-semibold tabular-nums">
-                    {{ count }}
-                </p>
+            <div
+                v-for="(count, key) in counts"
+                :key="key"
+                class="panel flex items-center justify-between gap-3 !py-4"
+            >
+                <div>
+                    <p
+                        class="text-[11px] font-medium text-muted-foreground capitalize"
+                    >
+                        {{ key }}
+                    </p>
+                    <p class="mt-1 text-2xl font-semibold tabular-nums">
+                        {{ count }}
+                    </p>
+                </div>
+                <span
+                    :class="[
+                        'flex size-9 items-center justify-center rounded-lg',
+                        key === 'closed'
+                            ? 'bg-emerald-500/8 text-emerald-600 dark:text-emerald-400'
+                            : key === 'blocked' || key === 'overdue'
+                              ? 'bg-amber-500/8 text-amber-600 dark:text-amber-400'
+                              : 'bg-primary/8 text-primary',
+                    ]"
+                    ><component
+                        :is="metricIcons[key]"
+                        class="size-4"
+                        :stroke-width="1.7"
+                /></span>
             </div>
         </div>
-        <form
-            v-if="creating && capabilities['tickets.create']"
-            class="panel space-y-4"
-            @submit.prevent="create"
-        >
-            <div class="flex flex-wrap items-center justify-between gap-3">
-                <h2 class="font-semibold">New ticket</h2>
-                <label class="flex items-center gap-2 text-sm"
-                    ><input
-                        v-model="form.is_intake_stub"
-                        type="checkbox"
-                        @change="quickIntake"
-                    />Urgent support intake</label
-                >
-            </div>
-            <p
-                v-if="form.is_intake_stub"
-                class="rounded-md bg-amber-500/10 p-3 text-sm"
-            >
-                Issue a real ticket key now. Title and description can follow;
-                incomplete intake cannot leave its initial stage.
-            </p>
-            <FormErrors :errors="form.errors" />
-            <TicketFields
-                :form="form"
-                :categories="categories"
-                :priorities="priorities"
-                :modules="modules"
-                :assignees="eligibleAssignees"
-                editable
-                :assignable="!!capabilities['tickets.assign']"
-                :incomplete="form.is_intake_stub"
-            />
-            <div class="flex gap-2">
-                <Button :disabled="form.processing">{{
-                    form.processing
-                        ? 'Creating…'
-                        : form.is_intake_stub
-                          ? 'Issue urgent ticket key'
-                          : 'Create ticket'
-                }}</Button
-                ><Button type="button" variant="ghost" @click="creating = false"
-                    >Cancel</Button
-                >
-            </div>
-        </form>
         <section class="space-y-4" aria-label="Tickets">
-            <div class="flex items-center justify-between">
-                <h2 class="font-semibold">
+            <div
+                class="flex flex-wrap items-center justify-between gap-3 border-b pb-4"
+            >
+                <h2 class="flex items-center gap-2 text-sm font-semibold">
+                    <Columns3 class="size-4 text-muted-foreground" />
                     Tickets
                     <span
                         v-if="!board"
@@ -223,124 +315,153 @@ function search() {
                         >{{ tickets.data.length }} on this page</span
                     >
                 </h2>
-                <div class="flex gap-1">
+                <div class="flex flex-wrap items-center gap-2">
                     <Button
+                        variant="outline"
                         size="sm"
-                        :variant="!board ? 'secondary' : 'ghost'"
-                        :aria-pressed="!board"
-                        @click="setView('list')"
-                        ><List class="size-4" />List</Button
-                    ><Button
-                        size="sm"
-                        :variant="board ? 'secondary' : 'ghost'"
-                        :aria-pressed="board"
-                        @click="setView('board')"
-                        ><Columns3 class="size-4" />Board</Button
+                        @click="filtering = true"
+                        ><SlidersHorizontal class="size-3.5" />Filters<Badge
+                            v-if="activeFilters"
+                            variant="secondary"
+                            class="px-1.5 text-[10px]"
+                            >{{ activeFilters }}</Badge
+                        ></Button
                     >
-                </div>
-            </div>
-            <FormErrors :errors="filter.errors" />
-            <form
-                class="panel grid gap-3 sm:grid-cols-2 xl:grid-cols-4"
-                @submit.prevent="search"
-            >
-                <Input
-                    v-model="filter.q"
-                    aria-label="Search tickets"
-                    placeholder="Search key, title, description…"
-                    class="sm:col-span-2"
-                />
-                <select
-                    v-model="filter.stage_id"
-                    aria-label="Filter by stage"
-                    class="control"
-                >
-                    <option value="">All stages</option>
-                    <option
-                        v-for="stage in stages"
-                        :key="stage.id"
-                        :value="stage.id"
-                    >
-                        {{ stage.name }}
-                    </option>
-                </select>
-                <select
-                    v-model="filter.assigned_to"
-                    aria-label="Filter by assignee"
-                    class="control"
-                >
-                    <option value="">All assignees</option>
-                    <option
-                        v-for="user in eligibleAssignees"
-                        :key="user.id"
-                        :value="user.id"
-                    >
-                        {{ user.name }}
-                    </option>
-                </select>
-                <select
-                    v-model="filter.category"
-                    aria-label="Filter by category"
-                    class="control"
-                >
-                    <option value="">All categories</option>
-                    <option
-                        v-for="value in categories"
-                        :key="value"
-                        :value="value"
-                    >
-                        {{ value.replaceAll('_', ' ') }}
-                    </option>
-                </select>
-                <select
-                    v-model="filter.priority"
-                    aria-label="Filter by priority"
-                    class="control"
-                >
-                    <option value="">All priorities</option>
-                    <option
-                        v-for="value in priorities"
-                        :key="value"
-                        :value="value"
-                    >
-                        {{ value }}
-                    </option>
-                </select>
-                <select
-                    v-model="filter.module_id"
-                    aria-label="Filter by module"
-                    class="control"
-                >
-                    <option value="">All modules</option>
-                    <option
-                        v-for="module in modules"
-                        :key="module.id"
-                        :value="module.id"
-                    >
-                        {{ module.name }}
-                    </option>
-                </select>
-                <select
-                    v-model="filter.due"
-                    aria-label="Filter by due date"
-                    class="control"
-                >
-                    <option value="">Any due date</option>
-                    <option value="overdue">Overdue</option>
-                    <option value="today">Due today</option>
-                </select>
-                <div class="flex gap-2 sm:col-span-2 xl:col-span-4">
-                    <Button size="sm" :disabled="filter.processing"
-                        ><Search class="size-4" />Apply filters</Button
-                    ><Button
-                        type="button"
+                    <Button
+                        v-if="activeFilters"
                         size="sm"
                         variant="ghost"
-                        @click="router.get(base, {}, { preserveState: false })"
-                        >Clear</Button
+                        @click="clearFilters"
+                        ><X class="size-3.5" />Clear filters</Button
                     >
+                    <div class="flex gap-1 rounded-lg border bg-muted/50 p-0.5">
+                        <Button
+                            size="sm"
+                            :variant="!board ? 'secondary' : 'ghost'"
+                            :aria-pressed="!board"
+                            @click="setView('list')"
+                            ><List class="size-4" />List</Button
+                        ><Button
+                            size="sm"
+                            :variant="board ? 'secondary' : 'ghost'"
+                            :aria-pressed="board"
+                            @click="setView('board')"
+                            ><Columns3 class="size-4" />Board</Button
+                        >
+                    </div>
                 </div>
-            </form>
+            </div>
+            <FormSurface
+                v-model:open="filtering"
+                title="Filter tickets"
+                description="Find the right work by stage, assignee, priority, or a few keywords."
+                :busy="filter.processing"
+            >
+                <FormErrors :errors="filter.errors" />
+                <form
+                    class="grid gap-3 sm:grid-cols-2"
+                    @submit.prevent="search"
+                >
+                    <Input
+                        v-model="filter.q"
+                        aria-label="Search tickets"
+                        placeholder="Search key, title, description…"
+                        class="sm:col-span-2"
+                    />
+                    <select
+                        v-model="filter.stage_id"
+                        aria-label="Filter by stage"
+                        class="control"
+                    >
+                        <option value="">All stages</option>
+                        <option
+                            v-for="stage in stages"
+                            :key="stage.id"
+                            :value="stage.id"
+                        >
+                            {{ stage.name }}
+                        </option>
+                    </select>
+                    <select
+                        v-model="filter.assigned_to"
+                        aria-label="Filter by assignee"
+                        class="control"
+                    >
+                        <option value="">All assignees</option>
+                        <option
+                            v-for="user in eligibleAssignees"
+                            :key="user.id"
+                            :value="user.id"
+                        >
+                            {{ user.name }}
+                        </option>
+                    </select>
+                    <select
+                        v-model="filter.category"
+                        aria-label="Filter by category"
+                        class="control"
+                    >
+                        <option value="">All categories</option>
+                        <option
+                            v-for="value in categories"
+                            :key="value"
+                            :value="value"
+                        >
+                            {{ value.replaceAll('_', ' ') }}
+                        </option>
+                    </select>
+                    <select
+                        v-model="filter.priority"
+                        aria-label="Filter by priority"
+                        class="control"
+                    >
+                        <option value="">All priorities</option>
+                        <option
+                            v-for="value in priorities"
+                            :key="value"
+                            :value="value"
+                        >
+                            {{ value }}
+                        </option>
+                    </select>
+                    <select
+                        v-model="filter.module_id"
+                        aria-label="Filter by module"
+                        class="control"
+                    >
+                        <option value="">All modules</option>
+                        <option
+                            v-for="module in modules"
+                            :key="module.id"
+                            :value="module.id"
+                        >
+                            {{ module.name }}
+                        </option>
+                    </select>
+                    <select
+                        v-model="filter.due"
+                        aria-label="Filter by due date"
+                        class="control"
+                    >
+                        <option value="">Any due date</option>
+                        <option value="overdue">Overdue</option>
+                        <option value="today">Due today</option>
+                    </select>
+                    <div
+                        class="flex justify-end gap-2 border-t pt-4 sm:col-span-2"
+                    >
+                        <Button size="sm" :disabled="filter.processing"
+                            ><Search class="size-4" />Apply filters</Button
+                        ><Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            @click="clearFilters"
+                            >Clear</Button
+                        >
+                    </div>
+                </form>
+            </FormSurface>
             <div v-if="!board && !tickets.data.length" class="panel empty">
                 No tickets match these filters.
             </div>
@@ -400,62 +521,7 @@ function search() {
                     </tbody>
                 </table>
             </div>
-            <div v-else class="space-y-3">
-                <p class="muted">
-                    All matching tickets, grouped by their assigned workflow
-                    stage. Each column has its own pagination; older workflow
-                    versions remain visible when they contain matching tickets.
-                </p>
-                <div class="flex gap-4 overflow-x-auto pb-3">
-                    <section
-                        v-for="column in boardColumns"
-                        :key="column.stage.id"
-                        class="w-72 shrink-0 rounded-xl bg-muted/60 p-3"
-                    >
-                        <h3
-                            class="mb-3 flex items-center justify-between text-sm font-medium"
-                        >
-                            {{ column.stage.name
-                            }}<span class="text-xs text-muted-foreground">{{
-                                column.tickets.total ??
-                                column.tickets.data.length
-                            }}</span>
-                        </h3>
-                        <p class="mb-3 text-xs text-muted-foreground">
-                            Workflow v{{ column.workflow_version }}
-                        </p>
-                        <div class="space-y-2">
-                            <Link
-                                v-for="ticket in column.tickets.data"
-                                :key="ticket.id"
-                                :href="`${base}/tickets/${ticket.id}`"
-                                class="block space-y-2 rounded-lg border bg-card p-3 hover:border-foreground/30"
-                                ><p
-                                    class="font-mono text-xs text-muted-foreground"
-                                >
-                                    {{ ticket.key }}
-                                </p>
-                                <p class="text-sm font-medium">
-                                    {{
-                                        ticket.title || 'Untitled urgent intake'
-                                    }}
-                                </p>
-                                <TicketBadges v-bind="ticket" />
-                                <p class="text-xs text-muted-foreground">
-                                    {{ ticket.assignee?.name ?? 'Unassigned' }}
-                                </p></Link
-                            >
-                            <p
-                                v-if="!column.tickets.data.length"
-                                class="py-6 text-center text-xs text-muted-foreground"
-                            >
-                                No matching tickets
-                            </p>
-                        </div>
-                        <Pagination :links="column.tickets.links" />
-                    </section>
-                </div>
-            </div>
+            <TicketKanban v-else :base="base" :columns="boardColumns" />
             <Pagination v-if="!board" :links="tickets.links" />
         </section>
         <details v-if="capabilities['tickets.view']" class="panel">

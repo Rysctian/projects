@@ -41,11 +41,16 @@ async function createProject(page: Page, code: string) {
 }
 
 async function move(page: Page, stage: string) {
+    await page
+        .getByRole('button', { name: 'Move ticket', exact: true })
+        .click();
     await page.getByLabel('Allowed destination').selectOption({ label: stage });
     await page
         .getByRole('button', { name: 'Move to selected stage', exact: true })
         .click();
-    await expect(page.getByLabel('Allowed destination')).toHaveValue('');
+    await expect(
+        page.getByRole('dialog', { name: 'Move ticket', exact: true }),
+    ).not.toBeVisible();
     await expect(page.getByText(stage, { exact: true }).first()).toBeVisible();
 }
 
@@ -88,6 +93,9 @@ test('admin manages a real request through assignment, development, QA, closure 
     await move(page, 'Development');
     await move(page, 'QA');
     await page
+        .getByRole('button', { name: 'Move ticket', exact: true })
+        .click();
+    await page
         .getByLabel('Allowed destination')
         .selectOption({ label: 'Closed' });
     await page
@@ -100,12 +108,24 @@ test('admin manages a real request through assignment, development, QA, closure 
         page.getByText(/passing sign-off|manual QA pass/).first(),
     ).toBeVisible();
     await page
+        .getByRole('dialog', { name: 'Move ticket', exact: true })
+        .getByRole('button', { name: 'Close', exact: true })
+        .click();
+    await page
+        .getByRole('button', { name: 'Record verification', exact: true })
+        .click();
+    await page
         .getByLabel('Verification notes')
         .fill('Checked approved and pending leave balances.');
     await page
         .getByRole('button', { name: 'Record sign-off', exact: true })
         .click();
-    await expect(page.getByLabel('Verification notes')).toHaveValue('');
+    await expect(
+        page.getByRole('dialog', { name: 'Record verification', exact: true }),
+    ).not.toBeVisible();
+    await page
+        .getByRole('button', { name: 'Move ticket', exact: true })
+        .click();
     await page
         .getByRole('button', { name: 'Close ticket', exact: true })
         .click();
@@ -116,6 +136,9 @@ test('admin manages a real request through assignment, development, QA, closure 
         path: testInfo.outputPath('closed-ticket.png'),
         fullPage: true,
     });
+    await page
+        .getByRole('button', { name: 'Manage ticket', exact: true })
+        .click();
     await page
         .getByRole('combobox', { name: 'Action', exact: true })
         .selectOption('reopen');
@@ -147,6 +170,9 @@ test('urgent fieldwork receives a real key and cannot advance until details are 
         page.getByText('E2EFAST-00001', { exact: true }),
     ).toBeVisible();
     await expect(page.getByText(/Incomplete urgent intake/)).toBeVisible();
+    await page
+        .getByRole('button', { name: 'Move ticket', exact: true })
+        .click();
     await page
         .getByLabel('Allowed destination')
         .selectOption({ label: 'Ready' });

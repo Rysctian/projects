@@ -7,7 +7,9 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
-    --font-sans: 'Geist', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+    --font-sans:
+        'Geist', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji',
+        'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
 
     /*
      * Radius system
@@ -70,12 +72,12 @@
 @layer utilities {
     body,
     html {
-        --font-sans: 'Geist', 'Geist Fallback';
+        --font-sans: 'Geist', ui-sans-serif, system-ui, sans-serif;
     }
 }
 
 :root {
-    --background: oklch(0.97 0.0029 264.542);
+    --background: #f8f9fb;
     --foreground: oklch(0.1801 0.0191 255.7673);
 
     --card: oklch(1 0 0);
@@ -109,7 +111,7 @@
     --chart-4: oklch(0.6806 0.1901 45.0513);
     --chart-5: oklch(0.6198 0.2297 5.1656);
 
-    --sidebar: oklch(0.97 0.0029 264.542);
+    --sidebar: #f3f4f7;
     --sidebar-foreground: oklch(0.1801 0.0191 255.7673);
     --sidebar-primary: oklch(0.6007 0.1903 257.9419);
     --sidebar-primary-foreground: oklch(1 0 0);
@@ -124,21 +126,31 @@
      * Better for accounting / ERP UI.
      * Less rounded than the previous 1.5rem / 24px.
      */
-    --radius: 0.75rem;
+    --radius: 0.625rem;
 
     --shadow-2xs: 0px 2px 28px 0px hsl(214.7368 10.8571% 34.3137% / 0.05);
 
     --shadow-xs: 0px 2px 28px 0px hsl(214.7368 10.8571% 34.3137% / 0.05);
 
-    --shadow-sm: 0px 2px 28px 0px hsl(214.7368 10.8571% 34.3137% / 0.1), 0px 1px 2px -1px hsl(214.7368 10.8571% 34.3137% / 0.1);
+    --shadow-sm:
+        0px 2px 28px 0px hsl(214.7368 10.8571% 34.3137% / 0.1),
+        0px 1px 2px -1px hsl(214.7368 10.8571% 34.3137% / 0.1);
 
-    --shadow: 0px 2px 28px 0px hsl(214.7368 10.8571% 34.3137% / 0.1), 0px 1px 2px -1px hsl(214.7368 10.8571% 34.3137% / 0.1);
+    --shadow:
+        0px 2px 28px 0px hsl(214.7368 10.8571% 34.3137% / 0.1),
+        0px 1px 2px -1px hsl(214.7368 10.8571% 34.3137% / 0.1);
 
-    --shadow-md: 0px 2px 28px 0px hsl(214.7368 10.8571% 34.3137% / 0.1), 0px 2px 4px -1px hsl(214.7368 10.8571% 34.3137% / 0.1);
+    --shadow-md:
+        0px 2px 28px 0px hsl(214.7368 10.8571% 34.3137% / 0.1),
+        0px 2px 4px -1px hsl(214.7368 10.8571% 34.3137% / 0.1);
 
-    --shadow-lg: 0px 2px 28px 0px hsl(214.7368 10.8571% 34.3137% / 0.1), 0px 4px 6px -1px hsl(214.7368 10.8571% 34.3137% / 0.1);
+    --shadow-lg:
+        0px 2px 28px 0px hsl(214.7368 10.8571% 34.3137% / 0.1),
+        0px 4px 6px -1px hsl(214.7368 10.8571% 34.3137% / 0.1);
 
-    --shadow-xl: 0px 2px 28px 0px hsl(214.7368 10.8571% 34.3137% / 0.1), 0px 8px 10px -1px hsl(214.7368 10.8571% 34.3137% / 0.1);
+    --shadow-xl:
+        0px 2px 28px 0px hsl(214.7368 10.8571% 34.3137% / 0.1),
+        0px 8px 10px -1px hsl(214.7368 10.8571% 34.3137% / 0.1);
 
     --shadow-2xl: 0px 2px 28px 0px hsl(214.7368 10.8571% 34.3137% / 0.25);
 }
@@ -191,15 +203,25 @@
 
     --shadow-xs: 0px 4px 40px 0px hsl(0 0% 0% / 0.23);
 
-    --shadow-sm: 0px 4px 40px 0px hsl(0 0% 0% / 0.45), 0px 1px 2px -1px hsl(0 0% 0% / 0.45);
+    --shadow-sm:
+        0px 4px 40px 0px hsl(0 0% 0% / 0.45),
+        0px 1px 2px -1px hsl(0 0% 0% / 0.45);
 
-    --shadow: 0px 4px 40px 0px hsl(0 0% 0% / 0.45), 0px 1px 2px -1px hsl(0 0% 0% / 0.45);
+    --shadow:
+        0px 4px 40px 0px hsl(0 0% 0% / 0.45),
+        0px 1px 2px -1px hsl(0 0% 0% / 0.45);
 
-    --shadow-md: 0px 4px 40px 0px hsl(0 0% 0% / 0.45), 0px 2px 4px -1px hsl(0 0% 0% / 0.45);
+    --shadow-md:
+        0px 4px 40px 0px hsl(0 0% 0% / 0.45),
+        0px 2px 4px -1px hsl(0 0% 0% / 0.45);
 
-    --shadow-lg: 0px 4px 40px 0px hsl(0 0% 0% / 0.45), 0px 4px 6px -1px hsl(0 0% 0% / 0.45);
+    --shadow-lg:
+        0px 4px 40px 0px hsl(0 0% 0% / 0.45),
+        0px 4px 6px -1px hsl(0 0% 0% / 0.45);
 
-    --shadow-xl: 0px 4px 40px 0px hsl(0 0% 0% / 0.45), 0px 8px 10px -1px hsl(0 0% 0% / 0.45);
+    --shadow-xl:
+        0px 4px 40px 0px hsl(0 0% 0% / 0.45),
+        0px 8px 10px -1px hsl(0 0% 0% / 0.45);
 
     --shadow-2xl: 0px 4px 40px 0px hsl(0 0% 0% / 1);
 }
@@ -216,5 +238,131 @@
     body {
         @apply bg-background text-foreground;
         font-family: var(--font-sans);
+    }
+}
+
+:root {
+    --ease-out-ui: cubic-bezier(0.23, 1, 0.32, 1);
+    --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+[data-slot='button'] {
+    transition:
+        background-color 150ms ease,
+        color 150ms ease,
+        box-shadow 150ms ease,
+        transform 140ms var(--ease-out-ui);
+}
+[data-slot='button']:active:not(:disabled) {
+    transform: scale(0.97);
+}
+[data-slot='dialog-content'],
+[data-slot='sheet-content'] {
+    animation-timing-function: var(--ease-drawer);
+    animation-duration: 240ms;
+}
+[data-slot='dialog-content'][data-state='closed'],
+[data-slot='sheet-content'][data-state='closed'] {
+    animation-duration: 160ms;
+}
+[data-slot='dialog-overlay'],
+[data-slot='sheet-overlay'] {
+    background: rgb(15 23 42 / 0.32);
+}
+.form-surface {
+    box-shadow: 0 24px 80px rgb(0 0 0 / 0.16);
+}
+.form-surface form > div:last-child:has(> button) {
+    padding-top: 0.5rem;
+}
+.astreia .control {
+    transition:
+        border-color 150ms ease,
+        box-shadow 150ms ease;
+    background: var(--card);
+}
+.astreia .control:hover:not(:disabled) {
+    border-color: color-mix(in oklab, var(--foreground) 25%, var(--border));
+}
+.astreia .data-table tbody {
+    background: var(--card);
+}
+.project-card {
+    transition:
+        border-color 180ms ease,
+        box-shadow 180ms ease,
+        transform 180ms var(--ease-out-ui);
+}
+.kanban-column {
+    background: color-mix(in oklab, var(--muted) 58%, var(--background));
+}
+.kanban-card {
+    box-shadow:
+        0 1px 3px rgb(15 23 42 / 0.04),
+        0 0 0 1px rgb(15 23 42 / 0.015);
+    transition:
+        border-color 160ms ease,
+        box-shadow 160ms ease,
+        transform 180ms var(--ease-out-ui);
+}
+.kanban-card:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 3px;
+}
+@media (hover: hover) and (pointer: fine) {
+    .project-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 24px rgb(15 23 42 / 0.06);
+    }
+    .kanban-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 5px 14px rgb(15 23 42 / 0.07);
+    }
+}
+.kanban-enter-active,
+.kanban-leave-active {
+    transition:
+        opacity 200ms var(--ease-out-ui),
+        transform 240ms var(--ease-out-ui);
+}
+.kanban-enter-active {
+    transition-delay: var(--card-delay, 0ms);
+}
+.kanban-enter-from,
+.kanban-leave-to {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+}
+.kanban-move {
+    transition: transform 240ms var(--ease-out-ui);
+}
+.kanban-leave-active {
+    position: absolute;
+}
+.board-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+    scroll-snap-type: x proximity;
+}
+.board-scroll > section {
+    scroll-snap-align: start;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 1ms !important;
+        animation-delay: 0ms !important;
+        transition-duration: 1ms !important;
+        transition-delay: 0ms !important;
+        scroll-behavior: auto !important;
+    }
+    .kanban-enter-from,
+    .kanban-leave-to,
+    .kanban-card:hover,
+    .project-card:hover,
+    [data-slot='button']:active:not(:disabled) {
+        transform: none;
     }
 }

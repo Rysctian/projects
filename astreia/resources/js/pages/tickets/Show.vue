@@ -5,6 +5,7 @@ import { Paperclip, RefreshCw, Pencil } from '@lucide/vue';
 import PageFrame from '@/components/astreia/PageFrame.vue';
 import Field from '@/components/astreia/Field.vue';
 import FormErrors from '@/components/astreia/FormErrors.vue';
+import FormSurface from '@/components/astreia/FormSurface.vue';
 import TicketFields from '@/components/astreia/TicketFields.vue';
 import TicketBadges from '@/components/astreia/TicketBadges.vue';
 import { Button } from '@/components/ui/button';
@@ -49,6 +50,8 @@ const props = defineProps<{
 }>();
 const base = `/projects/${props.project.id}/tickets/${props.ticket.id}`;
 const editing = ref(false);
+const commenting = ref(false);
+const uploading = ref(false);
 const tab = ref<'comments' | 'activity' | 'verification'>('comments');
 function values() {
     return {
@@ -120,6 +123,7 @@ function attach() {
         forceFormData: true,
         preserveScroll: true,
         onSuccess: () => {
+            uploading.value = false;
             upload.reset();
             if (fileInput.value) fileInput.value.value = '';
         },
@@ -157,44 +161,23 @@ function size(bytes: number) {
                 ><Link :href="base" :preserve-state="false"
                     ><RefreshCw class="size-4" />Reload</Link
                 ></Button
-            ><Button
-                v-if="canEdit || canAssign"
-                size="sm"
-                @click="editing = !editing"
-                ><Pencil class="size-4" />{{
-                    editing
-                        ? 'View ticket'
-                        : canEdit
-                          ? 'Edit ticket'
-                          : 'Change assignee'
-                }}</Button
-            ></template
-        >
-        <div class="flex flex-wrap items-center gap-2">
-            <Badge>{{ ticket.stage.name }}</Badge
-            ><TicketBadges v-bind="ticket" /><span
-                class="text-xs text-muted-foreground"
-                >Workflow v{{ ticket.workflow.version_number }} · Revision
-                {{ ticket.revision_number }}</span
             >
-        </div>
-        <div
-            v-if="ticket.is_intake_stub"
-            class="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-sm"
-        >
-            Incomplete urgent intake. Add the actual title, description, and
-            required details before moving this ticket forward.
-        </div>
-        <div class="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
-            <div class="min-w-0 space-y-6">
-                <form
-                    v-if="editing && (canEdit || canAssign)"
-                    class="panel space-y-4"
-                    @submit.prevent="save"
+            <FormSurface
+                v-if="canEdit || canAssign"
+                v-model:open="editing"
+                :title="canEdit ? 'Edit ticket' : 'Change assignee'"
+                description="Keep the context clear and the right person on the work."
+                mode="drawer"
+                :busy="form.processing"
+            >
+                <template #trigger
+                    ><Button size="sm"
+                        ><Pencil class="size-4" />{{
+                            canEdit ? 'Edit ticket' : 'Change assignee'
+                        }}</Button
+                    ></template
                 >
-                    <h2 class="section-title">
-                        {{ canEdit ? 'Ticket details' : 'Assignment' }}
-                    </h2>
+                <form class="space-y-4" @submit.prevent="save">
                     <FormErrors
                         :errors="form.errors"
                         :reload-url="base"
@@ -239,7 +222,26 @@ function size(bytes: number) {
                         >
                     </div>
                 </form>
-                <section v-else class="panel space-y-5">
+            </FormSurface>
+        </template>
+        <div class="flex flex-wrap items-center gap-2">
+            <Badge>{{ ticket.stage.name }}</Badge
+            ><TicketBadges v-bind="ticket" /><span
+                class="text-xs text-muted-foreground"
+                >Workflow v{{ ticket.workflow.version_number }} · Revision
+                {{ ticket.revision_number }}</span
+            >
+        </div>
+        <div
+            v-if="ticket.is_intake_stub"
+            class="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-sm"
+        >
+            Incomplete urgent intake. Add the actual title, description, and
+            required details before moving this ticket forward.
+        </div>
+        <div class="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+            <div class="min-w-0 space-y-6">
+                <section class="panel space-y-5">
                     <div>
                         <h2 class="section-title">Description</h2>
                         <p class="text-sm leading-relaxed whitespace-pre-wrap">
@@ -374,33 +376,46 @@ function size(bytes: number) {
                         <p v-if="!comments.length" class="muted">
                             No comments yet.
                         </p>
-                        <form
+                        <FormSurface
                             v-if="capabilities['tickets.comment']"
-                            class="space-y-3"
-                            @submit.prevent="
-                                comment.post(`${base}/comments`, {
-                                    preserveScroll: true,
-                                    onSuccess: () => comment.reset(),
-                                })
-                            "
+                            v-model:open="commenting"
+                            title="Add a comment"
+                            description="Share an update, useful context, or a question for the team."
+                            trigger="Add a comment"
+                            :busy="comment.processing"
                         >
-                            <FormErrors :errors="comment.errors" /><Field
-                                label="Add a comment"
-                            >
-                                <textarea
-                                    v-model="comment.body"
-                                    required
-                                    class="control"
-                                    placeholder="Share context, progress, or findings…"
-                                /></Field
-                            ><Button
-                                size="sm"
-                                :disabled="
-                                    comment.processing || !comment.body.trim()
+                            <form
+                                v-if="capabilities['tickets.comment']"
+                                class="space-y-3"
+                                @submit.prevent="
+                                    comment.post(`${base}/comments`, {
+                                        preserveScroll: true,
+                                        onSuccess: () => {
+                                            comment.reset();
+                                            commenting = false;
+                                        },
+                                    })
                                 "
-                                >Post comment</Button
                             >
-                        </form>
+                                <FormErrors :errors="comment.errors" /><Field
+                                    label="Add a comment"
+                                >
+                                    <textarea
+                                        v-model="comment.body"
+                                        required
+                                        class="control"
+                                        placeholder="Share context, progress, or findings…"
+                                    /></Field
+                                ><Button
+                                    size="sm"
+                                    :disabled="
+                                        comment.processing ||
+                                        !comment.body.trim()
+                                    "
+                                    >Post comment</Button
+                                >
+                            </form>
+                        </FormSurface>
                     </div>
                     <div
                         v-else-if="tab === 'activity'"
@@ -510,36 +525,47 @@ function size(bytes: number) {
                         </li>
                     </ul>
                     <p v-else class="muted">No attachments.</p>
-                    <form
+                    <FormSurface
                         v-if="uploadsEnabled && capabilities['tickets.attach']"
-                        class="space-y-3"
-                        @submit.prevent="attach"
+                        v-model:open="uploading"
+                        title="Attach evidence"
+                        description="Add a file that helps tell the story of this work."
+                        trigger="Upload attachment"
+                        :busy="upload.processing"
                     >
-                        <FormErrors :errors="upload.errors" /><Field
-                            label="Attach evidence"
-                            ><input
-                                ref="fileInput"
-                                type="file"
-                                required
-                                class="control"
-                                @change="selectFile" /></Field
-                        ><progress
-                            v-if="upload.progress"
-                            :value="upload.progress.percentage"
-                            max="100"
-                            class="w-full"
-                            aria-label="Upload progress"
-                        /><Button
-                            size="sm"
-                            variant="outline"
-                            :disabled="upload.processing || !upload.file"
-                            >{{
-                                upload.processing
-                                    ? 'Uploading…'
-                                    : 'Upload attachment'
-                            }}</Button
+                        <form
+                            v-if="
+                                uploadsEnabled && capabilities['tickets.attach']
+                            "
+                            class="space-y-3"
+                            @submit.prevent="attach"
                         >
-                    </form>
+                            <FormErrors :errors="upload.errors" /><Field
+                                label="Attach evidence"
+                                ><input
+                                    ref="fileInput"
+                                    type="file"
+                                    required
+                                    class="control"
+                                    @change="selectFile" /></Field
+                            ><progress
+                                v-if="upload.progress"
+                                :value="upload.progress.percentage"
+                                max="100"
+                                class="w-full"
+                                aria-label="Upload progress"
+                            /><Button
+                                size="sm"
+                                variant="outline"
+                                :disabled="upload.processing || !upload.file"
+                                >{{
+                                    upload.processing
+                                        ? 'Uploading…'
+                                        : 'Upload attachment'
+                                }}</Button
+                            >
+                        </form>
+                    </FormSurface>
                     <p v-else-if="!uploadsEnabled" class="muted">
                         Uploads are disabled until file types and limits are
                         approved.

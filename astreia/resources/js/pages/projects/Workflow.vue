@@ -2,6 +2,7 @@
 import { useForm } from '@inertiajs/vue3';
 import { ref } from 'vue';
 import { ArrowDown, ArrowUp, Plus } from '@lucide/vue';
+import FormSurface from '@/components/astreia/FormSurface.vue';
 import PageFrame from '@/components/astreia/PageFrame.vue';
 import Field from '@/components/astreia/Field.vue';
 import FormErrors from '@/components/astreia/FormErrors.vue';
@@ -48,6 +49,7 @@ const form = useForm({
     transitions: [] as DraftTransition[],
 });
 const publishForm = useForm({});
+const editing = ref(false);
 const source = ref('New workflow');
 function load(workflow?: Workflow, clone = false) {
     form.clearErrors();
@@ -137,6 +139,7 @@ function save() {
                       .filter((workflow) => workflow.state === 'draft')
                       .sort((a, b) => b.version_number - a.version_number)[0];
             if (draft) load(draft);
+            editing.value = false;
         },
     });
 }
@@ -166,238 +169,258 @@ function publish(id: number) {
             ></template
         >
         <FormErrors :errors="publishForm.errors" />
-        <section
+        <FormSurface
             v-if="capabilities['workflows.manage']"
-            class="panel space-y-5"
+            v-model:open="editing"
+            title="Workflow editor"
+            description="Design the stages and checkpoints that guide work from intake to completion."
+            trigger="Edit workflow"
+            mode="drawer"
+            :busy="form.processing"
         >
-            <div class="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                    <h2 class="font-semibold">Draft editor</h2>
-                    <p class="mt-1 text-xs text-muted-foreground">
-                        {{ source }}
-                    </p>
-                </div>
-                <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    @click="load()"
-                    >Start from template</Button
-                >
-            </div>
-            <FormErrors :errors="form.errors" />
-            <form class="space-y-6" @submit.prevent="save">
-                <fieldset class="space-y-3">
-                    <legend class="mb-3 text-sm font-semibold">Stages</legend>
-                    <p class="muted">
-                        Keep keys stable. Disabling a stage preserves its
-                        history. Exactly one stage must be initial.
-                    </p>
-                    <div
-                        v-for="(stage, index) in form.stages"
-                        :key="index"
-                        class="rounded-lg border p-3"
+            <section class="space-y-5">
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                        <h2 class="font-semibold">Draft editor</h2>
+                        <p class="mt-1 text-xs text-muted-foreground">
+                            {{ source }}
+                        </p>
+                    </div>
+                    <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        @click="load()"
+                        >Start from template</Button
                     >
+                </div>
+                <FormErrors :errors="form.errors" />
+                <form class="space-y-6" @submit.prevent="save">
+                    <fieldset class="space-y-3">
+                        <legend class="mb-3 text-sm font-semibold">
+                            Stages
+                        </legend>
+                        <p class="muted">
+                            Keep keys stable. Disabling a stage preserves its
+                            history. Exactly one stage must be initial.
+                        </p>
                         <div
-                            class="grid gap-3 sm:grid-cols-2 xl:grid-cols-[1fr_1.5fr_1fr_auto]"
+                            v-for="(stage, index) in form.stages"
+                            :key="index"
+                            class="rounded-lg border p-3"
                         >
-                            <Field label="Stable key"
-                                ><Input
-                                    v-model="stage.key"
-                                    required
-                                    pattern="[a-z][a-z0-9_]{0,59}"
-                                    placeholder="development_2" /></Field
-                            ><Field label="Stage name"
-                                ><Input v-model="stage.name" required /></Field
-                            ><Field label="Semantic type"
-                                ><select v-model="stage.type" class="control">
-                                    <option
-                                        v-for="type in types"
-                                        :key="type"
-                                        :value="type"
+                            <div class="grid gap-3 sm:grid-cols-2">
+                                <Field label="Stable key"
+                                    ><Input
+                                        v-model="stage.key"
+                                        required
+                                        pattern="[a-z][a-z0-9_]{0,59}"
+                                        placeholder="development_2" /></Field
+                                ><Field label="Stage name"
+                                    ><Input
+                                        v-model="stage.name"
+                                        required /></Field
+                                ><Field label="Semantic type"
+                                    ><select
+                                        v-model="stage.type"
+                                        class="control"
                                     >
-                                        {{ type.replaceAll('_', ' ') }}
-                                    </option>
-                                </select></Field
-                            >
-                            <div class="flex items-end gap-1 pb-0.5">
-                                <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="icon"
-                                    :disabled="index === 0"
-                                    :aria-label="`Move ${stage.name || 'stage'} up`"
-                                    @click="move(index, -1)"
-                                    ><ArrowUp class="size-4" /></Button
-                                ><Button
-                                    type="button"
-                                    variant="outline"
-                                    size="icon"
-                                    :disabled="index === form.stages.length - 1"
-                                    :aria-label="`Move ${stage.name || 'stage'} down`"
-                                    @click="move(index, 1)"
-                                    ><ArrowDown class="size-4"
-                                /></Button>
+                                        <option
+                                            v-for="type in types"
+                                            :key="type"
+                                            :value="type"
+                                        >
+                                            {{ type.replaceAll('_', ' ') }}
+                                        </option>
+                                    </select></Field
+                                >
+                                <div class="flex items-end gap-1 pb-0.5">
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="icon"
+                                        :disabled="index === 0"
+                                        :aria-label="`Move ${stage.name || 'stage'} up`"
+                                        @click="move(index, -1)"
+                                        ><ArrowUp class="size-4" /></Button
+                                    ><Button
+                                        type="button"
+                                        variant="outline"
+                                        size="icon"
+                                        :disabled="
+                                            index === form.stages.length - 1
+                                        "
+                                        :aria-label="`Move ${stage.name || 'stage'} down`"
+                                        @click="move(index, 1)"
+                                        ><ArrowDown class="size-4"
+                                    /></Button>
+                                </div>
+                            </div>
+                            <div class="mt-3 flex flex-wrap gap-5 text-xs">
+                                <label class="flex items-center gap-2"
+                                    ><input
+                                        :checked="stage.is_initial"
+                                        type="radio"
+                                        name="initial-stage"
+                                        @change="
+                                            form.stages.forEach(
+                                                (item) =>
+                                                    (item.is_initial =
+                                                        item === stage),
+                                            )
+                                        "
+                                    />Initial stage</label
+                                ><label class="flex items-center gap-2"
+                                    ><input
+                                        v-model="stage.is_active"
+                                        type="checkbox"
+                                    />Active</label
+                                >
                             </div>
                         </div>
-                        <div class="mt-3 flex flex-wrap gap-5 text-xs">
-                            <label class="flex items-center gap-2"
-                                ><input
-                                    :checked="stage.is_initial"
-                                    type="radio"
-                                    name="initial-stage"
-                                    @change="
-                                        form.stages.forEach(
-                                            (item) =>
-                                                (item.is_initial =
-                                                    item === stage),
-                                        )
-                                    "
-                                />Initial stage</label
-                            ><label class="flex items-center gap-2"
-                                ><input
-                                    v-model="stage.is_active"
-                                    type="checkbox"
-                                />Active</label
+                        <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            @click="
+                                form.stages.push({
+                                    key: `stage_${form.stages.length + 1}`,
+                                    name: '',
+                                    type: 'work',
+                                    sort_order: form.stages.length,
+                                    is_initial: false,
+                                    is_active: true,
+                                })
+                            "
+                            ><Plus class="size-4" />Add stage</Button
+                        >
+                    </fieldset>
+                    <fieldset class="space-y-3">
+                        <legend class="mb-3 text-sm font-semibold">
+                            Allowed transitions
+                        </legend>
+                        <p class="muted">
+                            Connect stages explicitly, including return paths.
+                            Closure checks always apply.
+                        </p>
+                        <div
+                            v-for="(transition, index) in form.transitions"
+                            :key="index"
+                            class="space-y-3 rounded-lg border p-3"
+                        >
+                            <div class="grid gap-3 sm:grid-cols-2">
+                                <Field label="From stage"
+                                    ><select
+                                        v-model="transition.from_key"
+                                        required
+                                        class="control"
+                                    >
+                                        <option value="" disabled>
+                                            Select stage
+                                        </option>
+                                        <option
+                                            v-for="stage in form.stages"
+                                            :key="stage.key"
+                                            :value="stage.key"
+                                        >
+                                            {{ stage.name || stage.key }}
+                                        </option>
+                                    </select></Field
+                                ><Field label="To stage"
+                                    ><select
+                                        v-model="transition.to_key"
+                                        required
+                                        class="control"
+                                    >
+                                        <option value="" disabled>
+                                            Select stage
+                                        </option>
+                                        <option
+                                            v-for="stage in form.stages"
+                                            :key="stage.key"
+                                            :value="stage.key"
+                                        >
+                                            {{ stage.name || stage.key }}
+                                        </option>
+                                    </select></Field
+                                ><Field label="Additional required permission"
+                                    ><select
+                                        v-model="
+                                            transition.required_permission_key
+                                        "
+                                        class="control"
+                                    >
+                                        <option :value="null">
+                                            No additional permission
+                                        </option>
+                                        <option
+                                            v-for="key in permissionKeys"
+                                            :key="key"
+                                            :value="key"
+                                        >
+                                            {{ key }}
+                                        </option>
+                                    </select></Field
+                                >
+                            </div>
+                            <div
+                                class="flex flex-wrap items-center gap-5 text-xs"
                             >
+                                <label class="flex items-center gap-2"
+                                    ><input
+                                        v-model="transition.requires_reason"
+                                        type="checkbox"
+                                    />Require reason</label
+                                ><label class="flex items-center gap-2"
+                                    ><input
+                                        v-model="transition.requires_signoff"
+                                        type="checkbox"
+                                    />Require manual sign-off</label
+                                ><Button
+                                    type="button"
+                                    size="sm"
+                                    variant="ghost"
+                                    class="ml-auto"
+                                    @click="form.transitions.splice(index, 1)"
+                                    >Remove transition</Button
+                                >
+                            </div>
                         </div>
-                    </div>
-                    <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        @click="
-                            form.stages.push({
-                                key: `stage_${form.stages.length + 1}`,
-                                name: '',
-                                type: 'work',
-                                sort_order: form.stages.length,
-                                is_initial: false,
-                                is_active: true,
-                            })
-                        "
-                        ><Plus class="size-4" />Add stage</Button
-                    >
-                </fieldset>
-                <fieldset class="space-y-3">
-                    <legend class="mb-3 text-sm font-semibold">
-                        Allowed transitions
-                    </legend>
-                    <p class="muted">
-                        Connect stages explicitly, including return paths.
-                        Closure checks always apply.
-                    </p>
+                        <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            @click="
+                                form.transitions.push({
+                                    from_key: form.stages[0]?.key ?? '',
+                                    to_key: '',
+                                    required_permission_key: null,
+                                    requires_reason: false,
+                                    requires_signoff: false,
+                                })
+                            "
+                            ><Plus class="size-4" />Add transition</Button
+                        >
+                    </fieldset>
                     <div
-                        v-for="(transition, index) in form.transitions"
-                        :key="index"
-                        class="space-y-3 rounded-lg border p-3"
+                        class="flex flex-wrap items-center gap-3 border-t pt-4"
                     >
-                        <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                            <Field label="From stage"
-                                ><select
-                                    v-model="transition.from_key"
-                                    required
-                                    class="control"
-                                >
-                                    <option value="" disabled>
-                                        Select stage
-                                    </option>
-                                    <option
-                                        v-for="stage in form.stages"
-                                        :key="stage.key"
-                                        :value="stage.key"
-                                    >
-                                        {{ stage.name || stage.key }}
-                                    </option>
-                                </select></Field
-                            ><Field label="To stage"
-                                ><select
-                                    v-model="transition.to_key"
-                                    required
-                                    class="control"
-                                >
-                                    <option value="" disabled>
-                                        Select stage
-                                    </option>
-                                    <option
-                                        v-for="stage in form.stages"
-                                        :key="stage.key"
-                                        :value="stage.key"
-                                    >
-                                        {{ stage.name || stage.key }}
-                                    </option>
-                                </select></Field
-                            ><Field label="Additional required permission"
-                                ><select
-                                    v-model="transition.required_permission_key"
-                                    class="control"
-                                >
-                                    <option :value="null">
-                                        No additional permission
-                                    </option>
-                                    <option
-                                        v-for="key in permissionKeys"
-                                        :key="key"
-                                        :value="key"
-                                    >
-                                        {{ key }}
-                                    </option>
-                                </select></Field
-                            >
-                        </div>
-                        <div class="flex flex-wrap items-center gap-5 text-xs">
-                            <label class="flex items-center gap-2"
-                                ><input
-                                    v-model="transition.requires_reason"
-                                    type="checkbox"
-                                />Require reason</label
-                            ><label class="flex items-center gap-2"
-                                ><input
-                                    v-model="transition.requires_signoff"
-                                    type="checkbox"
-                                />Require manual sign-off</label
-                            ><Button
-                                type="button"
-                                size="sm"
-                                variant="ghost"
-                                class="ml-auto"
-                                @click="form.transitions.splice(index, 1)"
-                                >Remove transition</Button
-                            >
-                        </div>
+                        <Button :disabled="form.processing">{{
+                            form.processing ? 'Saving…' : 'Save draft'
+                        }}</Button>
+                        <p class="muted">
+                            Save, review the version below, then publish.
+                        </p>
+                        <span
+                            v-if="form.recentlySuccessful"
+                            role="status"
+                            class="muted"
+                            >Draft saved.</span
+                        >
                     </div>
-                    <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        @click="
-                            form.transitions.push({
-                                from_key: form.stages[0]?.key ?? '',
-                                to_key: '',
-                                required_permission_key: null,
-                                requires_reason: false,
-                                requires_signoff: false,
-                            })
-                        "
-                        ><Plus class="size-4" />Add transition</Button
-                    >
-                </fieldset>
-                <div class="flex flex-wrap items-center gap-3 border-t pt-4">
-                    <Button :disabled="form.processing">{{
-                        form.processing ? 'Saving…' : 'Save draft'
-                    }}</Button>
-                    <p class="muted">
-                        Save, review the version below, then publish.
-                    </p>
-                    <span
-                        v-if="form.recentlySuccessful"
-                        role="status"
-                        class="muted"
-                        >Draft saved.</span
-                    >
-                </div>
-            </form>
-        </section>
+                </form>
+            </section>
+        </FormSurface>
         <section class="space-y-3">
             <h2 class="font-semibold">Version history</h2>
             <p v-if="!workflows.length" class="panel empty">
@@ -435,7 +458,10 @@ function publish(id: number) {
                         <Button
                             size="sm"
                             variant="outline"
-                            @click="load(workflow, workflow.state !== 'draft')"
+                            @click="
+                                load(workflow, workflow.state !== 'draft');
+                                editing = true;
+                            "
                             >{{
                                 workflow.state === 'draft'
                                     ? 'Load draft'

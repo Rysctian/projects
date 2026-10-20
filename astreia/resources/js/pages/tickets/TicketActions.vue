@@ -1,6 +1,8 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import { useForm } from '@inertiajs/vue3';
+import { ArrowRight, ShieldCheck, Zap } from '@lucide/vue';
+import FormSurface from '@/components/astreia/FormSurface.vue';
 import Field from '@/components/astreia/Field.vue';
 import FormErrors from '@/components/astreia/FormErrors.vue';
 import { Button } from '@/components/ui/button';
@@ -11,6 +13,9 @@ const props = defineProps<{
     transitions: TicketTransition[];
     capabilities: Capabilities;
 }>();
+const moving = ref(false);
+const verifying = ref(false);
+const acting = ref(false);
 const transition = useForm({
     lock_version: props.ticket.lock_version,
     transition_id: '' as number | '',
@@ -82,6 +87,7 @@ function move() {
         preserveScroll: true,
         onSuccess: () => {
             transition.reset('transition_id', 'reason');
+            moving.value = false;
         },
     });
 }
@@ -89,118 +95,143 @@ function verify() {
     signoff.lock_version = props.ticket.lock_version;
     signoff.post(`${props.base}/signoffs`, {
         preserveScroll: true,
-        onSuccess: () => signoff.reset('note'),
+        onSuccess: () => {
+            signoff.reset('note');
+            verifying.value = false;
+        },
     });
 }
 function act() {
     action.lock_version = props.ticket.lock_version;
     action.post(`${props.base}/actions`, {
         preserveScroll: true,
-        onSuccess: () => action.reset('action', 'reason'),
+        onSuccess: () => {
+            action.reset('action', 'reason');
+            acting.value = false;
+        },
     });
 }
 </script>
 <template>
     <section class="panel space-y-4">
-        <h2 class="font-semibold">Move ticket</h2>
-        <form
+        <h2 class="flex items-center gap-2 text-sm font-semibold">
+            <ArrowRight class="size-4 text-primary" />Workflow
+        </h2>
+        <p class="muted">Move this work to its next checkpoint.</p>
+        <FormSurface
             v-if="destinations.length"
-            class="space-y-4"
-            @submit.prevent="move"
+            v-model:open="moving"
+            title="Move ticket"
+            description="Choose the next stage. Workflow checks and sign-offs still apply."
+            trigger="Move ticket"
+            :busy="transition.processing"
         >
-            <FormErrors :errors="transition.errors" :reload-url="base" /><Field
-                label="Allowed destination"
-                ><select
-                    v-model="transition.transition_id"
-                    required
-                    class="control"
-                >
-                    <option value="" disabled>Select next stage</option>
-                    <option
-                        v-for="item in destinations"
-                        :key="item.id"
-                        :value="item.id"
-                    >
-                        {{ item.to_stage.name }}
-                    </option>
-                </select></Field
+            <form
+                v-if="destinations.length"
+                class="space-y-4"
+                @submit.prevent="move"
             >
-            <p
-                v-if="selected?.requires_signoff"
-                class="rounded-md bg-muted p-3 text-xs"
-            >
-                A valid manual sign-off is required before this transition.
-            </p>
-            <Field
-                :label="
-                    selected?.requires_reason
-                        ? 'Reason (required)'
-                        : 'Transition reason / notes'
-                "
-            >
-                <textarea
-                    v-model="transition.reason"
-                    class="control"
-                    :required="selected?.requires_reason"
-                />
-            </Field>
-            <template v-if="closing"
-                ><Field label="Completion notes">
-                    <textarea
-                        v-model="transition.completion_notes"
-                        class="control"
+                <FormErrors
+                    :errors="transition.errors"
+                    :reload-url="base"
+                /><Field label="Allowed destination"
+                    ><select
+                        v-model="transition.transition_id"
                         required
-                        placeholder="What was completed and how was it checked?"
-                    /></Field
-                ><template v-if="docDecision"
-                    ><Field label="Documentation impact"
-                        ><select
-                            v-model="transition.documentation_impact"
+                        class="control"
+                    >
+                        <option value="" disabled>Select next stage</option>
+                        <option
+                            v-for="item in destinations"
+                            :key="item.id"
+                            :value="item.id"
+                        >
+                            {{ item.to_stage.name }}
+                        </option>
+                    </select></Field
+                >
+                <p
+                    v-if="selected?.requires_signoff"
+                    class="rounded-md bg-muted p-3 text-xs"
+                >
+                    A valid manual sign-off is required before this transition.
+                </p>
+                <Field
+                    :label="
+                        selected?.requires_reason
+                            ? 'Reason (required)'
+                            : 'Transition reason / notes'
+                    "
+                >
+                    <textarea
+                        v-model="transition.reason"
+                        class="control"
+                        :required="selected?.requires_reason"
+                    />
+                </Field>
+                <template v-if="closing"
+                    ><Field label="Completion notes">
+                        <textarea
+                            v-model="transition.completion_notes"
                             class="control"
                             required
-                        >
-                            <option :value="null" disabled>
-                                Select a decision
-                            </option>
-                            <option value="required">
-                                Required · pending future documentation
-                            </option>
-                            <option value="not_required">Not required</option>
-                        </select></Field
-                    ><Field
-                        :label="
-                            transition.documentation_impact === 'not_required'
-                                ? 'Why is documentation not required?'
-                                : 'Documentation impact note'
-                        "
-                    >
-                        <textarea
-                            v-model="transition.documentation_impact_note"
-                            :required="
+                            placeholder="What was completed and how was it checked?"
+                        /></Field
+                    ><template v-if="docDecision"
+                        ><Field label="Documentation impact"
+                            ><select
+                                v-model="transition.documentation_impact"
+                                class="control"
+                                required
+                            >
+                                <option :value="null" disabled>
+                                    Select a decision
+                                </option>
+                                <option value="required">
+                                    Required · pending future documentation
+                                </option>
+                                <option value="not_required">
+                                    Not required
+                                </option>
+                            </select></Field
+                        ><Field
+                            :label="
                                 transition.documentation_impact ===
                                 'not_required'
+                                    ? 'Why is documentation not required?'
+                                    : 'Documentation impact note'
                             "
-                            class="control"
-                        />
-                    </Field>
-                    <p class="muted">
-                        A required impact records pending work. It does not
-                        publish documentation.
-                    </p></template
-                ></template
-            >
-            <Button
-                class="w-full"
-                :disabled="transition.processing || !transition.transition_id"
-                >{{
-                    transition.processing
-                        ? 'Moving…'
-                        : closing
-                          ? 'Close ticket'
-                          : 'Move to selected stage'
-                }}</Button
-            >
-        </form>
+                        >
+                            <textarea
+                                v-model="transition.documentation_impact_note"
+                                :required="
+                                    transition.documentation_impact ===
+                                    'not_required'
+                                "
+                                class="control"
+                            />
+                        </Field>
+                        <p class="muted">
+                            A required impact records pending work. It does not
+                            publish documentation.
+                        </p></template
+                    ></template
+                >
+                <Button
+                    class="w-full"
+                    :disabled="
+                        transition.processing || !transition.transition_id
+                    "
+                    >{{
+                        transition.processing
+                            ? 'Moving…'
+                            : closing
+                              ? 'Close ticket'
+                              : 'Move to selected stage'
+                    }}</Button
+                >
+            </form>
+        </FormSurface>
         <p v-else class="muted">
             No transitions are available for your account in this stage.
         </p>
@@ -216,68 +247,94 @@ function act() {
         "
         class="panel space-y-4"
     >
-        <h2 class="font-semibold">Record verification</h2>
+        <h2 class="flex items-center gap-2 text-sm font-semibold">
+            <ShieldCheck class="size-4 text-emerald-500" />Verification
+        </h2>
         <p class="muted">
             Applies to requirements revision {{ ticket.revision_number }}.
             Material requirement changes invalidate earlier approvals.
         </p>
-        <form class="space-y-4" @submit.prevent="verify">
-            <FormErrors :errors="signoff.errors" :reload-url="base" />
-            <div class="grid grid-cols-2 gap-3">
-                <Field label="Kind"
-                    ><select v-model="signoff.kind" class="control">
-                        <option value="qa">QA</option>
-                        <option value="review">Review</option>
-                        <option value="staging">Staging</option>
-                        <option value="resolution">Resolution</option>
-                    </select></Field
-                ><Field label="Result"
-                    ><select v-model="signoff.result" class="control">
-                        <option value="pass">Pass</option>
-                        <option value="fail">Fail</option>
-                    </select></Field
+        <FormSurface
+            v-model:open="verifying"
+            title="Record verification"
+            description="Record the checks performed against the current requirements."
+            trigger="Record verification"
+            :busy="signoff.processing"
+        >
+            <form class="space-y-4" @submit.prevent="verify">
+                <FormErrors :errors="signoff.errors" :reload-url="base" />
+                <div class="grid grid-cols-2 gap-3">
+                    <Field label="Kind"
+                        ><select v-model="signoff.kind" class="control">
+                            <option value="qa">QA</option>
+                            <option value="review">Review</option>
+                            <option value="staging">Staging</option>
+                            <option value="resolution">Resolution</option>
+                        </select></Field
+                    ><Field label="Result"
+                        ><select v-model="signoff.result" class="control">
+                            <option value="pass">Pass</option>
+                            <option value="fail">Fail</option>
+                        </select></Field
+                    >
+                </div>
+                <Field label="Verification notes">
+                    <textarea
+                        v-model="signoff.note"
+                        required
+                        class="control"
+                        placeholder="What was checked, evidence, or findings"
+                    /></Field
+                ><Button
+                    size="sm"
+                    variant="outline"
+                    :disabled="signoff.processing"
+                    >Record sign-off</Button
                 >
-            </div>
-            <Field label="Verification notes">
-                <textarea
-                    v-model="signoff.note"
-                    required
-                    class="control"
-                    placeholder="What was checked, evidence, or findings"
-                /></Field
-            ><Button size="sm" variant="outline" :disabled="signoff.processing"
-                >Record sign-off</Button
-            >
-        </form>
+            </form>
+        </FormSurface>
     </section>
     <section v-if="actions.length" class="panel space-y-4">
-        <h2 class="font-semibold">Ticket actions</h2>
-        <form class="space-y-4" @submit.prevent="act">
-            <FormErrors :errors="action.errors" :reload-url="base" /><Field
-                label="Action"
-                ><select v-model="action.action" required class="control">
-                    <option value="" disabled>Select action</option>
-                    <option
-                        v-for="item in actions"
-                        :key="item.value"
-                        :value="item.value"
-                    >
-                        {{ item.label }}
-                    </option>
-                </select></Field
-            ><Field label="Reason">
-                <textarea
-                    v-model="action.reason"
-                    required
-                    class="control"
-                    placeholder="Explain why this action is needed"
-                /></Field
-            ><Button
-                size="sm"
-                variant="outline"
-                :disabled="action.processing || !action.action"
-                >{{ action.processing ? 'Applying…' : 'Apply action' }}</Button
-            >
-        </form>
+        <h2 class="flex items-center gap-2 text-sm font-semibold">
+            <Zap class="size-4 text-amber-500" />Ticket actions
+        </h2>
+        <p class="muted">Pause, resume, or revisit the work with a reason.</p>
+        <FormSurface
+            v-model:open="acting"
+            title="Ticket actions"
+            description="Keep the team informed about why the status is changing."
+            trigger="Manage ticket"
+            :busy="action.processing"
+        >
+            <form class="space-y-4" @submit.prevent="act">
+                <FormErrors :errors="action.errors" :reload-url="base" /><Field
+                    label="Action"
+                    ><select v-model="action.action" required class="control">
+                        <option value="" disabled>Select action</option>
+                        <option
+                            v-for="item in actions"
+                            :key="item.value"
+                            :value="item.value"
+                        >
+                            {{ item.label }}
+                        </option>
+                    </select></Field
+                ><Field label="Reason">
+                    <textarea
+                        v-model="action.reason"
+                        required
+                        class="control"
+                        placeholder="Explain why this action is needed"
+                    /></Field
+                ><Button
+                    size="sm"
+                    variant="outline"
+                    :disabled="action.processing || !action.action"
+                    >{{
+                        action.processing ? 'Applying…' : 'Apply action'
+                    }}</Button
+                >
+            </form>
+        </FormSurface>
     </section>
 </template>

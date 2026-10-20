@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { ref } from 'vue';
+import { ShieldCheck, Plus } from '@lucide/vue';
+import FormSurface from '@/components/astreia/FormSurface.vue';
 import { useForm } from '@inertiajs/vue3';
 import Field from '@/components/astreia/Field.vue';
 import FormErrors from '@/components/astreia/FormErrors.vue';
@@ -12,6 +15,7 @@ const props = defineProps<{
     grantable: string[];
     editable: boolean;
 }>();
+const open = ref(false);
 const form = useForm({
     name: props.role?.name ?? '',
     description: props.role?.description ?? '',
@@ -25,6 +29,7 @@ function save() {
         preserveScroll: true,
         onSuccess: () => {
             if (!props.role) form.reset();
+            open.value = false;
         },
     };
     if (props.role) form.patch(`${props.base}/roles/${props.role.id}`, options);
@@ -32,15 +37,35 @@ function save() {
 }
 </script>
 <template>
-    <details class="rounded-lg border p-4">
-        <summary class="flex flex-wrap items-center gap-2">
-            {{ role?.name ?? '＋ Create role'
-            }}<Badge v-if="role && !role.is_active" variant="secondary"
-                >Inactive</Badge
-            ><span v-if="role" class="text-xs font-normal text-muted-foreground"
-                >{{ role.permissions.length }} permissions</span
+    <FormSurface
+        v-model:open="open"
+        :title="role ? role.name : 'Create role'"
+        description="Choose the permissions this role grants within the project."
+        mode="drawer"
+        :busy="form.processing"
+    >
+        <template #trigger
+            ><Button
+                variant="outline"
+                class="h-auto w-full justify-start gap-3 p-4 text-left"
             >
-        </summary>
+                <component
+                    :is="role ? ShieldCheck : Plus"
+                    class="size-4 shrink-0 text-primary"
+                />
+                <span class="flex-1"
+                    >{{ role?.name ?? 'Create role'
+                    }}<span
+                        v-if="role"
+                        class="mt-1 block text-xs font-normal text-muted-foreground"
+                        >{{ role.permissions.length }} permissions</span
+                    ></span
+                >
+                <Badge v-if="role && !role.is_active" variant="secondary"
+                    >Inactive</Badge
+                >
+            </Button></template
+        >
         <form class="mt-4 space-y-4" @submit.prevent="save">
             <FormErrors :errors="form.errors" />
             <div class="grid gap-4 sm:grid-cols-2">
@@ -65,7 +90,7 @@ function save() {
                 <p class="mb-3 text-xs text-muted-foreground">
                     You can grant only permissions available to your account.
                 </p>
-                <div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                <div class="grid gap-2 sm:grid-cols-2">
                     <label
                         v-for="key in grantable"
                         :key="key"
@@ -99,5 +124,5 @@ function save() {
                 >Role saved.</span
             >
         </form>
-    </details>
+    </FormSurface>
 </template>

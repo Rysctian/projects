@@ -38,6 +38,8 @@ yarn-error.log
 /.pi
 /.mcp.json
 /AGENTS.md
+/playwright-report
+/test-results
 /CLAUDE.md
 /boost.json
 /opencode.json

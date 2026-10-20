@@ -1,5 +1,4 @@
 @import 'tailwindcss';
-
 @import 'tw-animate-css';
 
 @source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
@@ -8,14 +7,21 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
-    --font-sans:
-        Instrument Sans, ui-sans-serif, system-ui, sans-serif,
-        'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol',
-        'Noto Color Emoji';
+    --font-sans: 'Geist', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
 
-    --radius-lg: var(--radius);
-    --radius-md: calc(var(--radius) - 2px);
+    /*
+     * Radius system
+     *
+     * Base: 10px
+     * sm:    6px
+     * md:    8px
+     * lg:   10px
+     * xl:   14px
+     */
     --radius-sm: calc(var(--radius) - 4px);
+    --radius-md: calc(var(--radius) - 2px);
+    --radius-lg: var(--radius);
+    --radius-xl: calc(var(--radius) + 4px);
 
     --color-background: var(--background);
     --color-foreground: var(--foreground);
@@ -51,7 +57,7 @@
     --color-chart-4: var(--chart-4);
     --color-chart-5: var(--chart-5);
 
-    --color-sidebar: var(--sidebar-background);
+    --color-sidebar: var(--sidebar);
     --color-sidebar-foreground: var(--sidebar-foreground);
     --color-sidebar-primary: var(--sidebar-primary);
     --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
@@ -61,112 +67,154 @@
     --color-sidebar-ring: var(--sidebar-ring);
 }
 
-/*
-  The default border color has changed to `currentColor` in Tailwind CSS v4,
-  so we've added these compatibility styles to make sure everything still
-  looks the same as it did with Tailwind CSS v3.
-
-  If we ever want to remove these styles, we need to add an explicit border
-  color utility to any element that depends on these defaults.
-*/
-@layer base {
-    *,
-    ::after,
-    ::before,
-    ::backdrop,
-    ::file-selector-button {
-        border-color: var(--color-gray-200, currentColor);
-    }
-}
-
 @layer utilities {
     body,
     html {
-        --font-sans:
-            'Instrument Sans', ui-sans-serif, system-ui, sans-serif,
-            'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol',
-            'Noto Color Emoji';
+        --font-sans: 'Geist', 'Geist Fallback';
     }
 }
 
 :root {
-    --background: hsl(0 0% 100%);
-    --foreground: hsl(0 0% 3.9%);
-    --card: hsl(0 0% 100%);
-    --card-foreground: hsl(0 0% 3.9%);
-    --popover: hsl(0 0% 100%);
-    --popover-foreground: hsl(0 0% 3.9%);
-    --primary: hsl(0 0% 9%);
-    --primary-foreground: hsl(0 0% 98%);
-    --secondary: hsl(0 0% 92.1%);
-    --secondary-foreground: hsl(0 0% 9%);
-    --muted: hsl(0 0% 96.1%);
-    --muted-foreground: hsl(0 0% 45.1%);
-    --accent: hsl(0 0% 96.1%);
-    --accent-foreground: hsl(0 0% 9%);
-    --destructive: hsl(0 84.2% 60.2%);
-    --destructive-foreground: hsl(0 0% 98%);
-    --border: hsl(0 0% 92.8%);
-    --input: hsl(0 0% 89.8%);
-    --ring: hsl(0 0% 3.9%);
-    --chart-1: hsl(12 76% 61%);
-    --chart-2: hsl(173 58% 39%);
-    --chart-3: hsl(197 37% 24%);
-    --chart-4: hsl(43 74% 66%);
-    --chart-5: hsl(27 87% 67%);
-    --radius: 0.5rem;
-    --sidebar-background: hsl(0 0% 98%);
-    --sidebar-foreground: hsl(240 5.3% 26.1%);
-    --sidebar-primary: hsl(0 0% 10%);
-    --sidebar-primary-foreground: hsl(0 0% 98%);
-    --sidebar-accent: hsl(0 0% 94%);
-    --sidebar-accent-foreground: hsl(0 0% 30%);
-    --sidebar-border: hsl(0 0% 91%);
-    --sidebar-ring: hsl(217.2 91.2% 59.8%);
-    --sidebar: hsl(0 0% 98%);
+    --background: oklch(0.97 0.0029 264.542);
+    --foreground: oklch(0.1801 0.0191 255.7673);
+
+    --card: oklch(1 0 0);
+    --card-foreground: oklch(0.1801 0.0191 255.7673);
+
+    --popover: oklch(1 0 0);
+    --popover-foreground: oklch(0.1801 0.0191 255.7673);
+
+    --primary: oklch(0.6007 0.1903 257.9419);
+    --primary-foreground: oklch(1 0 0);
+
+    --secondary: oklch(0.9394 0.0046 258.3251);
+    --secondary-foreground: oklch(0.2786 0.0211 257.2774);
+
+    --muted: oklch(0.9504 0.0042 236.4983);
+    --muted-foreground: oklch(0.4789 0.0204 256.3497);
+
+    --accent: oklch(0.9209 0.0294 257.7666);
+    --accent-foreground: oklch(0.3232 0.1376 260.7577);
+
+    --destructive: oklch(0.6207 0.2203 24.8903);
+    --destructive-foreground: oklch(1 0 0);
+
+    --border: oklch(0.8994 0.0064 255.4779);
+    --input: oklch(0.9205 0.0052 247.8807);
+    --ring: oklch(0.6007 0.1903 257.9419);
+
+    --chart-1: oklch(0.6007 0.1903 257.9419);
+    --chart-2: oklch(0.6369 0.1247 171.0112);
+    --chart-3: oklch(0.5495 0.2003 300.1164);
+    --chart-4: oklch(0.6806 0.1901 45.0513);
+    --chart-5: oklch(0.6198 0.2297 5.1656);
+
+    --sidebar: oklch(0.97 0.0029 264.542);
+    --sidebar-foreground: oklch(0.1801 0.0191 255.7673);
+    --sidebar-primary: oklch(0.6007 0.1903 257.9419);
+    --sidebar-primary-foreground: oklch(1 0 0);
+    --sidebar-accent: oklch(0.9209 0.0294 257.7666);
+    --sidebar-accent-foreground: oklch(0.3232 0.1376 260.7577);
+    --sidebar-border: oklch(0.8994 0.0064 255.4779);
+    --sidebar-ring: oklch(0.6007 0.1903 257.9419);
+
+    /*
+     * 0.625rem = 10px
+     *
+     * Better for accounting / ERP UI.
+     * Less rounded than the previous 1.5rem / 24px.
+     */
+    --radius: 0.75rem;
+
+    --shadow-2xs: 0px 2px 28px 0px hsl(214.7368 10.8571% 34.3137% / 0.05);
+
+    --shadow-xs: 0px 2px 28px 0px hsl(214.7368 10.8571% 34.3137% / 0.05);
+
+    --shadow-sm: 0px 2px 28px 0px hsl(214.7368 10.8571% 34.3137% / 0.1), 0px 1px 2px -1px hsl(214.7368 10.8571% 34.3137% / 0.1);
+
+    --shadow: 0px 2px 28px 0px hsl(214.7368 10.8571% 34.3137% / 0.1), 0px 1px 2px -1px hsl(214.7368 10.8571% 34.3137% / 0.1);
+
+    --shadow-md: 0px 2px 28px 0px hsl(214.7368 10.8571% 34.3137% / 0.1), 0px 2px 4px -1px hsl(214.7368 10.8571% 34.3137% / 0.1);
+
+    --shadow-lg: 0px 2px 28px 0px hsl(214.7368 10.8571% 34.3137% / 0.1), 0px 4px 6px -1px hsl(214.7368 10.8571% 34.3137% / 0.1);
+
+    --shadow-xl: 0px 2px 28px 0px hsl(214.7368 10.8571% 34.3137% / 0.1), 0px 8px 10px -1px hsl(214.7368 10.8571% 34.3137% / 0.1);
+
+    --shadow-2xl: 0px 2px 28px 0px hsl(214.7368 10.8571% 34.3137% / 0.25);
 }
 
 .dark {
-    --background: hsl(0 0% 3.9%);
-    --foreground: hsl(0 0% 98%);
-    --card: hsl(0 0% 3.9%);
-    --card-foreground: hsl(0 0% 98%);
-    --popover: hsl(0 0% 3.9%);
-    --popover-foreground: hsl(0 0% 98%);
-    --primary: hsl(0 0% 98%);
-    --primary-foreground: hsl(0 0% 9%);
-    --secondary: hsl(0 0% 14.9%);
-    --secondary-foreground: hsl(0 0% 98%);
-    --muted: hsl(0 0% 16.08%);
-    --muted-foreground: hsl(0 0% 63.9%);
-    --accent: hsl(0 0% 14.9%);
-    --accent-foreground: hsl(0 0% 98%);
-    --destructive: hsl(0 84% 60%);
-    --destructive-foreground: hsl(0 0% 98%);
-    --border: hsl(0 0% 14.9%);
-    --input: hsl(0 0% 14.9%);
-    --ring: hsl(0 0% 83.1%);
-    --chart-1: hsl(220 70% 50%);
-    --chart-2: hsl(160 60% 45%);
-    --chart-3: hsl(30 80% 55%);
-    --chart-4: hsl(280 65% 60%);
-    --chart-5: hsl(340 75% 55%);
-    --sidebar-background: hsl(0 0% 7%);
-    --sidebar-foreground: hsl(0 0% 95.9%);
-    --sidebar-primary: hsl(360, 100%, 100%);
-    --sidebar-primary-foreground: hsl(0 0% 100%);
-    --sidebar-accent: hsl(0 0% 15.9%);
-    --sidebar-accent-foreground: hsl(240 4.8% 95.9%);
-    --sidebar-border: hsl(0 0% 15.9%);
-    --sidebar-ring: hsl(217.2 91.2% 59.8%);
-    --sidebar: hsl(240 5.9% 10%);
+    --background: #151515;
+    --foreground: oklch(0.9602 0.0034 247.8587);
+
+    --card: oklch(0.1993 0.0111 260.661);
+    --card-foreground: oklch(0.9602 0.0034 247.8587);
+
+    --popover: #1c1c1c;
+    --popover-foreground: oklch(0.9602 0.0034 247.8587);
+
+    --primary: oklch(0.6496 0.1885 257.7207);
+    --primary-foreground: oklch(0.1205 0.0097 252.8876);
+
+    --secondary: oklch(0.2411 0.0097 248.229);
+    --secondary-foreground: oklch(0.9008 0.0105 247.9427);
+
+    --muted: oklch(0.2207 0.0091 255.6084);
+    --muted-foreground: oklch(0.6806 0.0194 245.5027);
+
+    --accent: oklch(0.2804 0.0598 257.709);
+    --accent-foreground: oklch(0.8435 0.0803 251.0277);
+
+    --destructive: oklch(0.6789 0.2096 21.9475);
+    --destructive-foreground: oklch(1 0 0);
+
+    --border: oklch(0.28 0.0102 260.7048);
+    --input: oklch(0.28 0.0102 260.7048);
+    --ring: oklch(0.6496 0.1885 257.7207);
+
+    --chart-1: oklch(0.6496 0.1885 257.7207);
+    --chart-2: oklch(0.6943 0.1346 171.9868);
+    --chart-3: oklch(0.6203 0.1997 300.1454);
+    --chart-4: oklch(0.7171 0.1878 45.3388);
+    --chart-5: oklch(0.6604 0.2297 5.1368);
+
+    --sidebar: #151515;
+    --sidebar-foreground: oklch(0.9602 0.0034 247.8587);
+    --sidebar-primary: oklch(0.6496 0.1885 257.7207);
+    --sidebar-primary-foreground: oklch(0.1205 0.0097 252.8876);
+    --sidebar-accent: oklch(0.2804 0.0598 257.709);
+    --sidebar-accent-foreground: oklch(0.8435 0.0803 251.0277);
+    --sidebar-border: oklch(0.2594 0.0104 260.6979);
+    --sidebar-ring: oklch(0.6496 0.1885 257.7207);
+
+    --shadow-2xs: 0px 4px 40px 0px hsl(0 0% 0% / 0.23);
+
+    --shadow-xs: 0px 4px 40px 0px hsl(0 0% 0% / 0.23);
+
+    --shadow-sm: 0px 4px 40px 0px hsl(0 0% 0% / 0.45), 0px 1px 2px -1px hsl(0 0% 0% / 0.45);
+
+    --shadow: 0px 4px 40px 0px hsl(0 0% 0% / 0.45), 0px 1px 2px -1px hsl(0 0% 0% / 0.45);
+
+    --shadow-md: 0px 4px 40px 0px hsl(0 0% 0% / 0.45), 0px 2px 4px -1px hsl(0 0% 0% / 0.45);
+
+    --shadow-lg: 0px 4px 40px 0px hsl(0 0% 0% / 0.45), 0px 4px 6px -1px hsl(0 0% 0% / 0.45);
+
+    --shadow-xl: 0px 4px 40px 0px hsl(0 0% 0% / 0.45), 0px 8px 10px -1px hsl(0 0% 0% / 0.45);
+
+    --shadow-2xl: 0px 4px 40px 0px hsl(0 0% 0% / 1);
 }
 
 @layer base {
     * {
         @apply border-border outline-ring/50;
     }
+
+    html {
+        font-family: var(--font-sans);
+    }
+
     body {
         @apply bg-background text-foreground;
+        font-family: var(--font-sans);
     }
 }

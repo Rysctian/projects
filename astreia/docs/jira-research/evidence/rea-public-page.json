@@ -1,0 +1,40 @@
+{
+    "record_kind": "analyst_evidence_receipt",
+    "is_full_canonical_rea_evidence": false,
+    "research_date": "2026-10-21",
+    "research_timezone": "Asia/Singapore",
+    "operation": "capture_browser_scenario",
+    "evidence_id": "ev_7eda26f133daefe3f584956aa864c2d85825ec20b912ba3c6d0a6e57976d6195",
+    "provider": "rea-playwright-browser-scenario",
+    "rea_version": "6.7.0",
+    "skill_version": "42",
+    "url": "https://www.atlassian.com/software/jira/service-management",
+    "scenario_sha256": "6a3daf285445abbbd9b8e397752707d4ff7cb7038c10b09fc319f8d613653743",
+    "dom_sha256": "707c91ab464b59ef085a0dcb0ac4e55c47caf986f002df95ff2a723d43ee62e8",
+    "accessibility_sha256": "bfdbe11afde04e9c0fb3290bf982d163117e22fc330f31aaac1cc8034b404bc3",
+    "browser": {
+        "mode": "launch",
+        "headless": true,
+        "product": "Chromium",
+        "version": "156.0.8078.4",
+        "process_ownership": "provider-owned",
+        "cleanup": "terminated-owned-process"
+    },
+    "declared_actions": [
+        "Navigate to the supplied public reference URL",
+        "Wait 1500 milliseconds",
+        "Capture final URL, DOM and accessibility text"
+    ],
+    "observation_summary": [
+        "Public sign-in link, work-email signup form and demo link",
+        "Service Management preview tabs for IT support, IT operations, Engineering and HR",
+        "Default IT support preview displays a help center"
+    ],
+    "limits": [
+        "Public marketing page only; preview content is not an authenticated Jira tenant",
+        "No login, signup, issue change, portal request, permission test or Jira API invocation",
+        "No network event capture requested; no claim about API traffic",
+        "Page source, proprietary scripts, branding and assets are not reproduced in this receipt",
+        "This receipt summarizes selected returned facts; the complete REA record remains in the active REA evidence ledger"
+    ]
+}

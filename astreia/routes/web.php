@@ -19,6 +19,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('admin/users/{user}/invitation', [UserController::class, 'invitation'])->middleware('throttle:6,1')->name('admin.users.invitation');
     Route::get('projects', [ProjectController::class, 'index'])->name('projects.index');
     Route::post('projects', [ProjectController::class, 'store'])->name('projects.store');
+    Route::post('projects/{project}/recover-access', [ProjectController::class, 'recoverAccess'])->middleware('throttle:6,1')->name('projects.recover-access');
     Route::get('projects/{project}', [ProjectController::class, 'show'])->name('projects.show');
     Route::patch('projects/{project}', [ProjectController::class, 'update'])->name('projects.update');
     Route::get('projects/{project}/settings', [ProjectController::class, 'settings'])->name('projects.settings');

@@ -29,6 +29,7 @@ class UserController extends Controller
         $data = $request->validate(['name' => 'required|string|max:255', 'email' => 'required|email|max:255|unique:users,email']);
         $user = DB::transaction(function () use ($request, $data) {
             $user = User::create([...$data, 'password' => Str::random(64)]);
+            $user->forceFill(['password_setup_required' => true])->save();
             AuditLog::record($request->user(), $user, 'user.created', after: $user->only(['name', 'email', 'is_active', 'is_system_admin']));
 
             return $user;
@@ -40,7 +41,7 @@ class UserController extends Controller
     public function invitation(Request $request, User $user): RedirectResponse
     {
         $this->authorizeAdmin($request);
-        abort_unless($user->is_active, 422, 'Activate the account before sending a password setup link.');
+        abort_unless($user->is_active && $user->password_setup_required, 422, 'Only active accounts awaiting initial setup can be invited.');
 
         return $this->sendInvitation($request, $user);
     }
@@ -48,7 +49,7 @@ class UserController extends Controller
     private function sendInvitation(Request $request, User $user): RedirectResponse
     {
         try {
-            $status = Password::sendResetLink(['email' => $user->email]);
+            $status = app(AccountService::class)->sendInvitation($request->user(), $user);
         } catch (\Throwable $error) {
             report($error);
 
@@ -57,7 +58,6 @@ class UserController extends Controller
         if ($status !== Password::RESET_LINK_SENT) {
             return back()->withErrors(['invitation' => __($status)]);
         }
-        AuditLog::record($request->user(), $user, 'user.invitation_sent');
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Password setup link sent.']);
 
         return back();
@@ -74,6 +74,6 @@ class UserController extends Controller
 
     private function authorizeAdmin(Request $request): void
     {
-        abort_unless($request->user()->is_active && $request->user()->is_system_admin, 403);
+        abort_unless($request->user()->hasGlobalPermission('users.manage'), 403);
     }
 }

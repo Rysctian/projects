@@ -27,6 +27,8 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import type {
     Capabilities,
+    CatalogOption,
+    PriorityOption,
     Label,
     Module,
     Paginated,
@@ -44,6 +46,11 @@ type Filters = {
     module_id?: string | number;
     due?: string;
     view?: 'list' | 'board';
+    work_type_id?: string | number;
+    priority_id?: string | number;
+    state?: '' | 'open' | 'resolved';
+    sort?: 'number' | 'title' | 'priority' | 'due_date' | 'updated_at';
+    direction?: 'asc' | 'desc';
 };
 const props = defineProps<{
     project: Project;
@@ -54,8 +61,10 @@ const props = defineProps<{
     modules: Module[];
     categories: string[];
     priorities: string[];
+    workTypes?: CatalogOption[];
+    priorityOptions?: PriorityOption[];
     capabilities: Capabilities;
-    counts: { open: number; blocked: number; overdue: number; closed: number };
+    counts: { open: number; blocked?: number; overdue: number; closed: number };
     labels: Label[];
     boardColumns: {
         stage: Stage;
@@ -69,8 +78,21 @@ const props = defineProps<{
     };
 }>();
 const base = `/projects/${props.project.id}`;
+const core = computed(() => props.project.process_model === 'core');
+const archived = computed(
+    () => core.value && props.project.status === 'archived',
+);
+const displayedCounts = computed(() =>
+    core.value
+        ? {
+              open: props.counts.open,
+              closed: props.counts.closed,
+              overdue: props.counts.overdue,
+          }
+        : props.counts,
+);
 const creating = ref(false);
-const board = computed(() => props.filters.view === 'board');
+const board = computed(() => !core.value && props.filters.view === 'board');
 const filtering = ref(false);
 const activeFilters = computed(
     () =>
@@ -87,8 +109,15 @@ const metricIcons = {
 const form = useForm({
     title: '',
     description: '',
-    category: props.categories[0] ?? 'new_feature',
+    category: props.categories?.[0] ?? 'new_feature',
     priority: 'normal',
+    work_type_id: props.workTypes?.find((item) => item.is_active)?.id ?? null,
+    priority_id:
+        props.priorityOptions?.find(
+            (item) => item.is_active && item.code === 'normal',
+        )?.id ??
+        props.priorityOptions?.find((item) => item.is_active)?.id ??
+        null,
     module_id: null as number | null,
     assigned_to: null as number | null,
     estimate_minutes: null as number | null,
@@ -105,6 +134,11 @@ const filter = useForm({
     module_id: props.filters.module_id ?? '',
     due: props.filters.due ?? '',
     view: props.filters.view ?? 'list',
+    work_type_id: props.filters.work_type_id ?? '',
+    priority_id: props.filters.priority_id ?? '',
+    state: props.filters.state ?? '',
+    sort: props.filters.sort ?? 'number',
+    direction: props.filters.direction ?? 'desc',
 });
 function setView(view: 'list' | 'board') {
     filter.view = view;
@@ -121,17 +155,31 @@ function quickIntake() {
     }
 }
 function create() {
-    form.transform((data) => ({
-        ...data,
-        estimate_minutes:
-            data.estimate_minutes === null ||
-            String(data.estimate_minutes) === ''
-                ? null
-                : Number(data.estimate_minutes),
-        acceptance_criteria: data.acceptance_criteria
-            .map((value) => value.trim())
-            .filter(Boolean),
-    })).post(`${base}/tickets`, {
+    if (archived.value) return;
+    form.transform((data) => {
+        const {
+            category,
+            priority,
+            is_intake_stub,
+            work_type_id,
+            priority_id,
+            ...fields
+        } = data;
+        return {
+            ...fields,
+            ...(core.value
+                ? { work_type_id, priority_id }
+                : { category, priority, is_intake_stub }),
+            estimate_minutes:
+                data.estimate_minutes === null ||
+                String(data.estimate_minutes) === ''
+                    ? null
+                    : Number(data.estimate_minutes),
+            acceptance_criteria: data.acceptance_criteria
+                .map((value) => value.trim())
+                .filter(Boolean),
+        };
+    }).post(`${base}/tickets`, {
         onSuccess: () => {
             form.reset();
             creating.value = false;
@@ -139,14 +187,34 @@ function create() {
     });
 }
 function search() {
-    filter.get(base, {
-        preserveState: true,
-        preserveScroll: true,
-        replace: true,
-        onSuccess: () => {
-            filtering.value = false;
-        },
-    });
+    filter
+        .transform((data) => {
+            const {
+                category,
+                priority,
+                view,
+                work_type_id,
+                priority_id,
+                state,
+                sort,
+                direction,
+                ...fields
+            } = data;
+            return {
+                ...fields,
+                ...(core.value
+                    ? { work_type_id, priority_id, state, sort, direction }
+                    : { category, priority, view }),
+            };
+        })
+        .get(base, {
+            preserveState: true,
+            preserveScroll: true,
+            replace: true,
+            onSuccess: () => {
+                filtering.value = false;
+            },
+        });
 }
 function clearFilters() {
     filter.reset();
@@ -157,6 +225,11 @@ function clearFilters() {
     filter.assigned_to = '';
     filter.module_id = '';
     filter.due = '';
+    filter.work_type_id = '';
+    filter.priority_id = '';
+    filter.state = '';
+    filter.sort = 'number';
+    filter.direction = 'desc';
     filter.view = board.value ? 'board' : 'list';
     search();
 }
@@ -171,7 +244,7 @@ function clearFilters() {
     >
         <template #actions>
             <Button
-                v-if="capabilities['workflows.manage']"
+                v-if="!core && capabilities['workflows.manage']"
                 variant="outline"
                 as-child
                 ><Link :href="`${base}/workflows`"
@@ -181,6 +254,7 @@ function clearFilters() {
             <Button
                 v-if="
                     capabilities['project.manage'] ||
+                    capabilities['project.restore'] ||
                     capabilities['members.manage'] ||
                     capabilities['access.manage'] ||
                     capabilities['modules.manage'] ||
@@ -193,7 +267,7 @@ function clearFilters() {
                 ></Button
             >
             <FormSurface
-                v-if="capabilities['tickets.create']"
+                v-if="!archived && capabilities['tickets.create']"
                 v-model:open="creating"
                 title="New ticket"
                 description="Give the work a little context. Your team's next step starts here."
@@ -207,6 +281,7 @@ function clearFilters() {
                 >
                 <form class="space-y-5" @submit.prevent="create">
                     <label
+                        v-if="!core"
                         class="flex items-center justify-between gap-3 rounded-lg border bg-muted/40 p-3 text-xs"
                     >
                         <span
@@ -224,7 +299,7 @@ function clearFilters() {
                         />
                     </label>
                     <p
-                        v-if="form.is_intake_stub"
+                        v-if="!core && form.is_intake_stub"
                         class="rounded-md bg-amber-500/10 p-3 text-xs"
                     >
                         Incomplete intake cannot leave its initial stage until
@@ -232,6 +307,9 @@ function clearFilters() {
                     </p>
                     <FormErrors :errors="form.errors" />
                     <TicketFields
+                        :core="core"
+                        :work-types="workTypes"
+                        :priority-options="priorityOptions"
                         :form="form"
                         :categories="categories"
                         :priorities="priorities"
@@ -239,7 +317,7 @@ function clearFilters() {
                         :assignees="eligibleAssignees"
                         editable
                         :assignable="!!capabilities['tickets.assign']"
-                        :incomplete="form.is_intake_stub"
+                        :incomplete="!core && form.is_intake_stub"
                     />
                     <div
                         class="flex items-center justify-end gap-2 border-t pt-4"
@@ -270,9 +348,18 @@ function clearFilters() {
             This project is archived. Available actions reflect your current
             permissions.
         </div>
-        <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <p v-if="core" class="muted">
+            Totals reflect the current filters. Due dates use
+            {{ project.timezone }}.
+        </p>
+        <div
+            :class="[
+                'grid grid-cols-2 gap-3',
+                core ? 'lg:grid-cols-3' : 'lg:grid-cols-4',
+            ]"
+        >
             <div
-                v-for="(count, key) in counts"
+                v-for="(count, key) in displayedCounts"
                 :key="key"
                 class="panel flex items-center justify-between gap-3 !py-4"
             >
@@ -280,7 +367,7 @@ function clearFilters() {
                     <p
                         class="text-[11px] font-medium text-muted-foreground capitalize"
                     >
-                        {{ key }}
+                        {{ core && key === 'closed' ? 'Resolved' : key }}
                     </p>
                     <p class="mt-1 text-2xl font-semibold tabular-nums">
                         {{ count }}
@@ -334,7 +421,10 @@ function clearFilters() {
                         @click="clearFilters"
                         ><X class="size-3.5" />Clear filters</Button
                     >
-                    <div class="flex gap-1 rounded-lg border bg-muted/50 p-0.5">
+                    <div
+                        v-if="!core"
+                        class="flex gap-1 rounded-lg border bg-muted/50 p-0.5"
+                    >
                         <Button
                             size="sm"
                             :variant="!board ? 'secondary' : 'ghost'"
@@ -365,7 +455,11 @@ function clearFilters() {
                     <Input
                         v-model="filter.q"
                         aria-label="Search tickets"
-                        placeholder="Search key, title, description…"
+                        :placeholder="
+                            core
+                                ? 'Search exact key or summary…'
+                                : 'Search key, title, description…'
+                        "
                         class="sm:col-span-2"
                     />
                     <select
@@ -397,6 +491,7 @@ function clearFilters() {
                         </option>
                     </select>
                     <select
+                        v-if="!core"
                         v-model="filter.category"
                         aria-label="Filter by category"
                         class="control"
@@ -411,6 +506,7 @@ function clearFilters() {
                         </option>
                     </select>
                     <select
+                        v-if="!core"
                         v-model="filter.priority"
                         aria-label="Filter by priority"
                         class="control"
@@ -424,12 +520,76 @@ function clearFilters() {
                             {{ value }}
                         </option>
                     </select>
+                    <template v-if="core">
+                        <select
+                            v-model="filter.work_type_id"
+                            aria-label="Filter by work type"
+                            class="control"
+                        >
+                            <option value="">All work types</option>
+                            <option
+                                v-for="item in workTypes"
+                                :key="item.id"
+                                :value="item.id"
+                            >
+                                {{ item.name
+                                }}{{ item.is_active ? '' : ' (retired)' }}
+                            </option>
+                        </select>
+                        <select
+                            v-model="filter.priority_id"
+                            aria-label="Filter by priority"
+                            class="control"
+                        >
+                            <option value="">All priorities</option>
+                            <option
+                                v-for="item in priorityOptions"
+                                :key="item.id"
+                                :value="item.id"
+                            >
+                                {{ item.name
+                                }}{{ item.is_active ? '' : ' (retired)' }}
+                            </option>
+                        </select>
+                        <select
+                            v-model="filter.state"
+                            aria-label="Filter by state"
+                            class="control"
+                        >
+                            <option value="">All states</option>
+                            <option value="open">Open</option>
+                            <option value="resolved">Resolved</option>
+                        </select>
+                        <select
+                            v-model="filter.sort"
+                            aria-label="Sort tickets"
+                            class="control"
+                        >
+                            <option value="number">Ticket number</option>
+                            <option value="title">Summary</option>
+                            <option value="priority">Priority</option>
+                            <option value="due_date">Due date</option>
+                            <option value="updated_at">Last updated</option>
+                        </select>
+                        <select
+                            v-model="filter.direction"
+                            aria-label="Sort direction"
+                            class="control"
+                        >
+                            <option value="asc">Ascending</option>
+                            <option value="desc">Descending</option>
+                        </select>
+                    </template>
                     <select
                         v-model="filter.module_id"
-                        aria-label="Filter by module"
+                        :aria-label="
+                            core ? 'Filter by component' : 'Filter by module'
+                        "
                         class="control"
                     >
-                        <option value="">All modules</option>
+                        <option value="">
+                            {{ core ? 'All components' : 'All modules' }}
+                        </option>
                         <option
                             v-for="module in modules"
                             :key="module.id"
@@ -471,7 +631,9 @@ function clearFilters() {
                         <tr>
                             <th>Ticket</th>
                             <th>Stage</th>
-                            <th>Priority / flags</th>
+                            <th>
+                                {{ core ? 'Priority' : 'Priority / flags' }}
+                            </th>
                             <th>Assignee</th>
                             <th>Due</th>
                         </tr>
@@ -502,7 +664,20 @@ function clearFilters() {
                                 <p
                                     class="mt-1 text-xs text-muted-foreground capitalize"
                                 >
-                                    {{ ticket.category.replaceAll('_', ' ') }}
+                                    {{
+                                        core
+                                            ? (ticket.work_type?.name ??
+                                              workTypes?.find(
+                                                  (item) =>
+                                                      item.id ===
+                                                      ticket.work_type_id,
+                                              )?.name ??
+                                              ticket.category)
+                                            : ticket.category.replaceAll(
+                                                  '_',
+                                                  ' ',
+                                              )
+                                    }}
                                 </p>
                             </td>
                             <td>
@@ -510,9 +685,23 @@ function clearFilters() {
                                     ticket.stage.name
                                 }}</Badge>
                             </td>
-                            <td><TicketBadges v-bind="ticket" /></td>
+                            <td>
+                                <Badge v-if="core" variant="outline">{{
+                                    priorityOptions?.find(
+                                        (item) =>
+                                            item.id === ticket.priority_id,
+                                    )?.name ?? ticket.priority
+                                }}</Badge
+                                ><TicketBadges v-else v-bind="ticket" />
+                            </td>
                             <td class="whitespace-nowrap">
                                 {{ ticket.assignee?.name ?? 'Unassigned' }}
+                                <p
+                                    v-if="core && ticket.needs_reassignment"
+                                    class="text-xs text-amber-600"
+                                >
+                                    Needs reassignment
+                                </p>
                             </td>
                             <td class="whitespace-nowrap text-muted-foreground">
                                 {{ ticket.due_date?.slice(0, 10) ?? '—' }}
@@ -524,7 +713,7 @@ function clearFilters() {
             <TicketKanban v-else :base="base" :columns="boardColumns" />
             <Pagination v-if="!board" :links="tickets.links" />
         </section>
-        <details v-if="capabilities['tickets.view']" class="panel">
+        <details v-if="!core && capabilities['tickets.view']" class="panel">
             <summary>Project reporting</summary>
             <p class="muted mt-3">
                 Totals cover the full project. Workload counts open,

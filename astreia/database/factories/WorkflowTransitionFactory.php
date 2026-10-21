@@ -13,8 +13,8 @@ class WorkflowTransitionFactory extends Factory
     {
         return [
             'workflow_id' => ProjectWorkflow::factory(),
-            'from_stage_id' => fn (array $attributes) => ProjectWorkflow::findOrFail($attributes['workflow_id'])->stages()->where('key', 'backlog')->valueOrFail('id'),
-            'to_stage_id' => fn (array $attributes) => ProjectWorkflow::findOrFail($attributes['workflow_id'])->stages()->where('key', 'development')->valueOrFail('id'),
+            'from_stage_id' => fn (array $attributes) => ProjectWorkflow::whereKey($attributes['workflow_id'])->firstOrFail()->stages()->where('key', 'backlog')->valueOrFail('id'),
+            'to_stage_id' => fn (array $attributes) => ProjectWorkflow::whereKey($attributes['workflow_id'])->firstOrFail()->stages()->where('key', 'development')->valueOrFail('id'),
             'required_permission_id' => null,
             'requires_reason' => false,
             'requires_signoff' => false,

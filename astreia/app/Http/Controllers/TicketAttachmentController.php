@@ -16,6 +16,7 @@ class TicketAttachmentController extends Controller
 {
     public function store(Request $request, Project $project, int $ticket, TicketService $service): RedirectResponse
     {
+        abort_if($project->isCore(), 403, 'Attachments are not enabled for core projects.');
         ProjectAccess::authorize($request->user(), $project, 'tickets.attach');
         ProjectAccess::authorize($request->user(), $project, 'tickets.view', false);
         abort_unless(config('astreia.attachments.enabled') && count(config('astreia.attachments.extensions')) > 0, 403, 'Attachment uploads await approval of the file policy.');

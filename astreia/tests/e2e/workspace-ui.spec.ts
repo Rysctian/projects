@@ -39,6 +39,8 @@ test('project dialog restores focus and ticket drawer creates work on the animat
         .getByRole('button', { name: 'Create project', exact: true })
         .click();
     await expect(page).toHaveURL(/\/projects\/\d+$/);
+    await page.goto('/projects');
+    await page.getByRole('link').filter({ hasText: 'E2EUILEG legacy workspace' }).click();
     const base = new URL(page.url()).pathname;
     await page.getByRole('button', { name: 'New ticket', exact: true }).click();
     const drawer = page.getByRole('dialog', {
@@ -175,6 +177,8 @@ test('project settings and workflow changes save from their dialogs and drawers'
         .getByRole('button', { name: 'Create project', exact: true })
         .click();
     await expect(page).toHaveURL(/\/projects\/\d+$/);
+    await page.goto('/projects');
+    await page.getByRole('link').filter({ hasText: 'E2ESETLEG legacy workspace' }).click();
     const base = new URL(page.url()).pathname;
     await page.getByRole('link', { name: 'Settings', exact: true }).click();
     await page

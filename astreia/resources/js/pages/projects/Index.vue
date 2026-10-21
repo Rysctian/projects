@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Link, useForm } from '@inertiajs/vue3';
+import { Link, router, useForm } from '@inertiajs/vue3';
 import { FolderKanban, Plus, ArrowUpRight } from '@lucide/vue';
 import { ref } from 'vue';
 import PageFrame from '@/components/astreia/PageFrame.vue';
@@ -11,12 +11,41 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import type { Paginated, Project } from '@/types/astreia';
-defineProps<{
+const props = defineProps<{
     projects: Paginated<Project & { open_tickets_count: number }>;
     canCreate: boolean;
+    filters?: { status?: 'active' | 'archived' | 'all' };
+    recoverableProjects?: Pick<Project, 'id' | 'code' | 'name'>[];
 }>();
 const creating = ref(false);
-const form = useForm({ code: '', name: '', description: '' });
+const status = ref(props.filters?.status ?? 'active');
+const recovering = ref(false);
+const recoveryProject = ref<number | ''>('');
+const recovery = useForm({ reason: '' });
+const form = useForm({ code: '', name: '', description: '', timezone: 'UTC' });
+function filterProjects() {
+    router.get(
+        '/projects',
+        { status: status.value },
+        { preserveState: true, preserveScroll: true },
+    );
+}
+function recover() {
+    if (
+        !props.recoverableProjects?.some(
+            (project) => project.id === recoveryProject.value,
+        )
+    )
+        return;
+    recovery.post(`/projects/${recoveryProject.value}/recover-access`, {
+        preserveScroll: true,
+        onSuccess: () => {
+            recovery.reset();
+            recoveryProject.value = '';
+            recovering.value = false;
+        },
+    });
+}
 function create() {
     form.post('/projects', {
         onSuccess: () => {
@@ -53,11 +82,13 @@ function create() {
                             hint="Permanent prefix for ticket keys."
                             ><Input
                                 v-model="form.code"
+                                aria-label="Project code"
                                 required
                                 placeholder="HRIS" /></Field
                         ><Field label="Name" class="sm:col-span-2"
                             ><Input
                                 v-model="form.name"
+                                aria-label="Project name"
                                 required
                                 placeholder="Human Resources"
                         /></Field>
@@ -65,8 +96,20 @@ function create() {
                     <Field label="Description">
                         <textarea
                             v-model="form.description"
+                            aria-label="Project description"
                             class="control"
                             placeholder="What does this project support?"
+                        />
+                    </Field>
+                    <Field
+                        label="Timezone"
+                        hint="IANA timezone used to interpret project due dates, for example UTC or Asia/Singapore."
+                    >
+                        <Input
+                            v-model="form.timezone"
+                            aria-label="Project timezone"
+                            required
+                            placeholder="UTC"
                         />
                     </Field>
                     <div class="flex gap-2">
@@ -82,6 +125,52 @@ function create() {
                     </div>
                 </form>
             </FormSurface>
+            <FormSurface
+                v-if="recoverableProjects?.length"
+                v-model:open="recovering"
+                title="Recover project access"
+                description="Restore project administration access with an audited reason."
+                trigger="Recover project access"
+                :busy="recovery.processing"
+            >
+                <form class="space-y-4" @submit.prevent="recover">
+                    <FormErrors :errors="recovery.errors" />
+                    <Field label="Project">
+                        <select
+                            v-model="recoveryProject"
+                            aria-label="Project to recover"
+                            required
+                            class="control"
+                        >
+                            <option value="" disabled>Select project</option>
+                            <option
+                                v-for="project in recoverableProjects"
+                                :key="project.id"
+                                :value="project.id"
+                            >
+                                {{ project.code }} · {{ project.name }}
+                            </option>
+                        </select>
+                    </Field>
+                    <Field label="Recovery reason">
+                        <textarea
+                            v-model="recovery.reason"
+                            aria-label="Recovery reason"
+                            required
+                            maxlength="10000"
+                            class="control"
+                        />
+                    </Field>
+                    <Button
+                        :disabled="
+                            recovery.processing ||
+                            !recoveryProject ||
+                            !recovery.reason.trim()
+                        "
+                        >Recover access</Button
+                    >
+                </form>
+            </FormSurface>
         </template>
         <div class="flex items-center justify-between border-b pb-3">
             <p class="flex items-center gap-2 text-sm font-medium">
@@ -91,9 +180,16 @@ function create() {
                     projects.total ?? projects.data.length
                 }}</Badge>
             </p>
-            <span class="text-xs text-muted-foreground"
-                >Built for your next big thing</span
+            <select
+                v-model="status"
+                aria-label="Project status"
+                class="control w-auto"
+                @change="filterProjects"
             >
+                <option value="active">Active projects</option>
+                <option value="archived">Archived projects</option>
+                <option value="all">All projects</option>
+            </select>
         </div>
         <div
             v-if="projects.data.length"

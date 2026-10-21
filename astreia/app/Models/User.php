@@ -7,6 +7,7 @@ use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
@@ -32,10 +33,43 @@ use Laravel\Fortify\TwoFactorAuthenticatable;
 #[Hidden(['password', 'two_factor_secret', 'two_factor_recovery_codes', 'remember_token'])]
 class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
 {
+    public const GLOBAL_PERMISSIONS = ['users.manage', 'projects.create', 'projects.recover'];
+
     protected $attributes = ['is_active' => true, 'is_system_admin' => false];
 
     /** @use HasFactory<UserFactory> */
     use HasFactory, Notifiable, PasskeyAuthenticatable, TwoFactorAuthenticatable;
+
+    protected static function booted(): void
+    {
+        static::saved(function (User $user) {
+            if ($user->wasChanged('is_system_admin') || ($user->wasRecentlyCreated && $user->is_system_admin)) {
+                $ids = Permission::where('scope', 'global')->whereIn('key', self::GLOBAL_PERMISSIONS)->pluck('id');
+                if ($user->is_system_admin) {
+                    $user->globalPermissions()->syncWithoutDetaching($ids);
+                } else {
+                    $user->globalPermissions()->detach($ids);
+                }
+            }
+        });
+    }
+
+    /** @return BelongsToMany<Permission, $this> */
+    public function globalPermissions(): BelongsToMany
+    {
+        return $this->belongsToMany(Permission::class, 'global_user_permissions');
+    }
+
+    public function hasGlobalPermission(string $key): bool
+    {
+        return $this->is_active && $this->globalPermissions()->where('scope', 'global')->where('key', $key)->exists();
+    }
+
+    /** @return HasMany<AccountInvitation, $this> */
+    public function invitations(): HasMany
+    {
+        return $this->hasMany(AccountInvitation::class);
+    }
 
     /** @return HasMany<ProjectMember, $this> */
     public function projectMemberships(): HasMany
@@ -48,7 +82,7 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
         if (! $this->is_active) {
             return false;
         }
-        if ($this->is_system_admin) {
+        if ($this->is_system_admin && ! $project->isCore()) {
             return true;
         }
         $member = $this->projectMemberships()->where('project_id', $project->id)->where('is_active', true)->first();
@@ -77,6 +111,7 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
             'two_factor_confirmed_at' => 'datetime',
             'is_active' => 'boolean',
             'is_system_admin' => 'boolean',
+            'password_setup_required' => 'boolean',
         ];
     }
 }

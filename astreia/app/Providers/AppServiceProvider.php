@@ -5,6 +5,8 @@ namespace App\Providers;
 use App\Models\Project;
 use App\Models\User;
 use Carbon\CarbonImmutable;
+use Illuminate\Auth\EloquentUserProvider;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
@@ -27,6 +29,8 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         $this->configureDefaults();
+        Auth::provider('eloquent', fn ($app, array $config) => (new EloquentUserProvider($app['hash'], $config['model']))
+            ->withQuery(fn ($query) => $query->where('is_active', true)));
         Gate::define('project-permission', fn (User $user, Project $project, string $key) => $user->hasProjectPermission($project, $key));
     }
 

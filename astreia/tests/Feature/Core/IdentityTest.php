@@ -54,8 +54,13 @@ test('last administrator cannot bypass protection through profile deactivation',
 });
 
 test('newly invited users verify their email when setting their first password', function () {
-    $user = User::factory()->unverified()->create();
-    $token = Password::createToken($user);
+    Notification::fake();
+    $admin = User::factory()->create(['is_system_admin' => true]);
+    $this->actingAs($admin)->post('/admin/users', ['name' => 'New Member', 'email' => 'new@example.test'])->assertSessionHasNoErrors();
+    $user = User::where('email', 'new@example.test')->firstOrFail();
+    $token = Notification::sent($user, ResetPassword::class)->first()->token;
+    expect($user->email_verified_at)->toBeNull();
+    $this->app['auth']->forgetGuards();
     $this->post('/reset-password', ['token' => $token, 'email' => $user->email, 'password' => 'password', 'password_confirmation' => 'password'])->assertRedirect('/login');
     expect($user->fresh()->email_verified_at)->not->toBeNull();
 });
@@ -63,9 +68,13 @@ test('newly invited users verify their email when setting their first password',
 test('administrators can resend password setup without exposing tokens', function () {
     Notification::fake();
     $admin = User::factory()->create(['is_system_admin' => true]);
-    $user = User::factory()->unverified()->create();
+    $this->actingAs($admin)->post('/admin/users', ['name' => 'New Member', 'email' => 'new@example.test'])->assertSessionHasNoErrors();
+    $user = User::where('email', 'new@example.test')->firstOrFail();
+    $firstToken = Notification::sent($user, ResetPassword::class)->first()->token;
+    $this->travel(61)->seconds();
     $this->actingAs($admin)->post('/admin/users/'.$user->id.'/invitation')->assertRedirect()->assertSessionHasNoErrors();
     Notification::assertSentTo($user, ResetPassword::class);
+    expect(Notification::sent($user, ResetPassword::class)->last()->token)->not->toBe($firstToken);
     $this->assertDatabaseHas('audit_logs', ['action' => 'user.invitation_sent', 'entity_id' => $user->id]);
 });
 

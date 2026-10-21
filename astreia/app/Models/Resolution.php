@@ -1,0 +1,27 @@
+<?php
+
+namespace App\Models;
+
+use Database\Factories\ResolutionFactory;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+
+class Resolution extends Model
+{
+    /** @use HasFactory<ResolutionFactory> */
+    use HasFactory;
+
+    protected $guarded = ['id'];
+
+    protected function casts(): array
+    {
+        return ['is_active' => 'boolean'];
+    }
+
+    /** @return BelongsTo<Project, $this> */
+    public function project(): BelongsTo
+    {
+        return $this->belongsTo(Project::class);
+    }
+}

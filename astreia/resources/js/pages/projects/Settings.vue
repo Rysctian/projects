@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { Link, useForm } from '@inertiajs/vue3';
 import FormSurface from '@/components/astreia/FormSurface.vue';
 import { Layers, Plus, Settings2, Tag, Users } from '@lucide/vue';
@@ -32,16 +32,75 @@ const props = defineProps<{
     labels: Label[];
     capabilities: Capabilities;
 }>();
+const core = computed(() => props.project.process_model === 'core');
+const archived = computed(
+    () => core.value && props.project.status === 'archived',
+);
+const canManage = computed(
+    () => !archived.value && !!props.capabilities['project.manage'],
+);
+const canRestore = computed(
+    () => archived.value && !!props.capabilities['project.restore'],
+);
+const restoring = ref(false);
 const detailsOpen = ref(false);
 const moduleOpen = ref(false);
 const labelOpen = ref(false);
 const memberOpen = ref(false);
 const base = `/projects/${props.project.id}`;
-const projectForm = useForm({
-    name: props.project.name,
-    description: props.project.description ?? '',
-    status: props.project.status,
-});
+function projectValues() {
+    return {
+        name: props.project.name,
+        description: props.project.description ?? '',
+        status: props.project.status,
+        timezone: props.project.timezone ?? 'UTC',
+        lock_version: props.project.lock_version,
+        reason: '',
+    };
+}
+const projectForm = useForm(projectValues());
+const restoreForm = useForm({ reason: '' });
+watch(
+    () => props.project.lock_version,
+    () => {
+        if (!projectForm.isDirty) {
+            Object.assign(projectForm, projectValues());
+            projectForm.defaults(projectValues());
+        }
+    },
+);
+function saveProject() {
+    if (!canManage.value) return;
+    projectForm
+        .transform(({ timezone, lock_version, reason, ...fields }) => ({
+            ...fields,
+            ...(core.value ? { timezone, lock_version, reason } : {}),
+        }))
+        .patch(base, {
+            preserveScroll: true,
+            onSuccess: () => {
+                detailsOpen.value = false;
+                Object.assign(projectForm, projectValues());
+                projectForm.defaults(projectValues());
+            },
+        });
+}
+function restoreProject() {
+    if (!canRestore.value) return;
+    restoreForm
+        .transform((data) => ({
+            ...projectValues(),
+            status: 'active',
+            reason: data.reason,
+        }))
+        .patch(base, {
+            preserveScroll: true,
+            onSuccess: () => {
+                restoreForm.reset();
+                restoring.value = false;
+            },
+        });
+}
 const moduleForm = useForm({ code: '', name: '' });
 const labelForm = useForm({ name: '' });
 const memberForm = useForm({
@@ -54,11 +113,15 @@ const memberForm = useForm({
         title="Project settings"
         :eyebrow="project.code"
         :back="base"
-        description="Maintain project details, team access, and functional modules."
+        :description="
+            core
+                ? 'Maintain project details, team access, and components.'
+                : 'Maintain project details, team access, and functional modules.'
+        "
     >
         <template #actions
             ><Button
-                v-if="capabilities['workflows.manage']"
+                v-if="!core && capabilities['workflows.manage']"
                 variant="outline"
                 as-child
                 ><Link :href="`${base}/workflows`"
@@ -71,13 +134,20 @@ const memberForm = useForm({
             class="flex flex-wrap gap-4 border-b pb-3 text-sm text-muted-foreground"
         >
             <a href="#details" class="hover:text-foreground">General</a
-            ><a href="#modules" class="hover:text-foreground">Modules</a
+            ><a href="#modules" class="hover:text-foreground">{{
+                core ? 'Components' : 'Modules'
+            }}</a
             ><a href="#members" class="hover:text-foreground">Members</a
             ><a href="#roles" class="hover:text-foreground"
                 >Roles & permissions</a
             >
-            <a href="#labels" class="hover:text-foreground">Labels</a>
+            <a v-if="!core" href="#labels" class="hover:text-foreground"
+                >Labels</a
+            >
         </nav>
+        <p v-if="archived" class="rounded-lg border bg-muted px-4 py-3 text-sm">
+            This project is archived. Restore it before making changes.
+        </p>
         <section id="details" class="panel scroll-mt-5">
             <div class="mb-5 flex items-center gap-3">
                 <span
@@ -99,29 +169,23 @@ const memberForm = useForm({
                 }}
             </p>
             <FormSurface
-                v-if="capabilities['project.manage']"
+                v-if="canManage"
                 v-model:open="detailsOpen"
                 title="Project details"
                 description="Update the name, context, and status of your project."
                 trigger="Edit project details"
                 :busy="projectForm.processing"
             >
-                <form
-                    class="max-w-3xl space-y-4"
-                    @submit.prevent="
-                        projectForm.patch(base, {
-                            preserveScroll: true,
-                            onSuccess: () => {
-                                detailsOpen = false;
-                            },
-                        })
-                    "
-                >
-                    <FormErrors :errors="projectForm.errors" />
+                <form class="max-w-3xl space-y-4" @submit.prevent="saveProject">
+                    <FormErrors
+                        :errors="projectForm.errors"
+                        :reload-url="`${base}/settings`"
+                    />
                     <div class="grid gap-4 sm:grid-cols-2">
                         <Field label="Project name"
                             ><Input
                                 v-model="projectForm.name"
+                                aria-label="Project name"
                                 required
                                 :disabled="
                                     !capabilities['project.manage']
@@ -129,6 +193,7 @@ const memberForm = useForm({
                         ><Field label="Status"
                             ><select
                                 v-model="projectForm.status"
+                                aria-label="Project status"
                                 :disabled="!capabilities['project.manage']"
                                 class="control"
                             >
@@ -140,10 +205,35 @@ const memberForm = useForm({
                     <Field label="Description">
                         <textarea
                             v-model="projectForm.description"
+                            aria-label="Project description"
                             :disabled="!capabilities['project.manage']"
                             class="control"
                         />
                     </Field>
+                    <template v-if="core">
+                        <Field
+                            label="Timezone"
+                            hint="IANA timezone used to interpret due dates, for example UTC or Asia/Singapore."
+                        >
+                            <Input
+                                v-model="projectForm.timezone"
+                                aria-label="Project timezone"
+                                required
+                            />
+                        </Field>
+                        <Field
+                            v-if="projectForm.status !== project.status"
+                            label="Status change reason"
+                        >
+                            <textarea
+                                v-model="projectForm.reason"
+                                aria-label="Status change reason"
+                                required
+                                maxlength="10000"
+                                class="control"
+                            />
+                        </Field>
+                    </template>
                     <p class="muted">
                         Project code {{ project.code }} is permanent. Archiving
                         preserves tickets and history.
@@ -161,10 +251,42 @@ const memberForm = useForm({
                     >
                 </form>
             </FormSurface>
+            <FormSurface
+                v-if="canRestore"
+                v-model:open="restoring"
+                title="Restore project"
+                description="Restore this project to allow work to continue. A reason is recorded in the audit history."
+                trigger="Restore project"
+                :busy="restoreForm.processing"
+            >
+                <form class="space-y-4" @submit.prevent="restoreProject">
+                    <FormErrors
+                        :errors="restoreForm.errors"
+                        :reload-url="`${base}/settings`"
+                    />
+                    <Field label="Restoration reason">
+                        <textarea
+                            v-model="restoreForm.reason"
+                            aria-label="Restoration reason"
+                            required
+                            maxlength="10000"
+                            class="control"
+                        />
+                    </Field>
+                    <Button
+                        :disabled="
+                            restoreForm.processing || !restoreForm.reason.trim()
+                        "
+                        >Restore project</Button
+                    >
+                </form>
+            </FormSurface>
         </section>
         <section id="modules" class="panel scroll-mt-5">
             <h2 class="section-title">
-                <Layers class="mr-2 inline size-4 text-primary" />Modules
+                <Layers class="mr-2 inline size-4 text-primary" />{{
+                    core ? 'Components' : 'Modules'
+                }}
                 <span class="text-muted-foreground"
                     >({{ modules.length }})</span
                 >
@@ -175,20 +297,27 @@ const memberForm = useForm({
                     :key="module.id"
                     :base="base"
                     :module="module"
-                    :editable="!!capabilities['modules.manage']"
+                    :editable="!archived && !!capabilities['modules.manage']"
                 />
             </div>
-            <p v-if="!modules.length" class="muted">No modules yet.</p>
-            <div v-if="capabilities['modules.manage']" class="mt-4">
+            <p v-if="!modules.length" class="muted">
+                {{ core ? 'No components yet.' : 'No modules yet.' }}
+            </p>
+            <div
+                v-if="!archived && capabilities['modules.manage']"
+                class="mt-4"
+            >
                 <FormSurface
                     v-model:open="moduleOpen"
-                    title="Add module"
+                    :title="core ? 'Add component' : 'Add module'"
                     description="Organize related work into a functional area."
                     :busy="moduleForm.processing"
                 >
                     <template #trigger
                         ><Button variant="outline" size="sm"
-                            ><Plus class="size-3.5" />Add module</Button
+                            ><Plus class="size-3.5" />{{
+                                core ? 'Add component' : 'Add module'
+                            }}</Button
                         ></template
                     >
                     <form
@@ -217,14 +346,14 @@ const memberForm = useForm({
                                     placeholder="Payroll"
                             /></Field>
                         </div>
-                        <Button size="sm" :disabled="moduleForm.processing"
-                            >Add module</Button
-                        >
+                        <Button size="sm" :disabled="moduleForm.processing">{{
+                            core ? 'Add component' : 'Add module'
+                        }}</Button>
                     </form>
                 </FormSurface>
             </div>
         </section>
-        <section id="labels" class="panel scroll-mt-5">
+        <section v-if="!core" id="labels" class="panel scroll-mt-5">
             <h2 class="section-title">
                 <Tag class="mr-2 inline size-4 text-primary" />Labels
             </h2>
@@ -294,12 +423,19 @@ const memberForm = useForm({
                     :member="member"
                     :roles="roles"
                     :grantable="grantablePermissions"
-                    :manage-members="!!capabilities['members.manage']"
-                    :manage-access="!!capabilities['access.manage']"
+                    :manage-members="
+                        !archived && !!capabilities['members.manage']
+                    "
+                    :manage-access="
+                        !archived && !!capabilities['access.manage']
+                    "
                 />
             </div>
             <p v-if="!members.length" class="muted">No project members yet.</p>
-            <div v-if="capabilities['members.manage']" class="mt-4">
+            <div
+                v-if="!archived && capabilities['members.manage']"
+                class="mt-4"
+            >
                 <FormSurface
                     v-model:open="memberOpen"
                     title="Add member"
@@ -379,9 +515,9 @@ const memberForm = useForm({
                     :base="base"
                     :role="role"
                     :grantable="grantablePermissions"
-                    :editable="!!capabilities['access.manage']"
+                    :editable="!archived && !!capabilities['access.manage']"
                 /><RoleEditor
-                    v-if="capabilities['access.manage']"
+                    v-if="!archived && capabilities['access.manage']"
                     :base="base"
                     :grantable="grantablePermissions"
                     editable

@@ -25,7 +25,7 @@ const mainNavItems = computed<NavItem[]>(() => [
         href: dashboard(),
         icon: LayoutGrid,
     },
-    ...(page.props.auth.user.is_system_admin
+    ...(page.props.auth.canManageUsers
         ? [{ title: 'Admin Users', href: '/admin/users', icon: Users }]
         : []),
 ]);

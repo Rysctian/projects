@@ -23,6 +23,8 @@ Its defining capability is **bidirectional ticket ↔ documentation management**
 
 ## 2. Specification authority and scope
 
+**2026-10-21 approved exception:** New projects follow `docs/jira-research/phases/PHASE_01.md`, with the compatibility and schema mapping recorded in `docs/changes/2026-10-21-secure-core.md`. Existing projects retain the foundation workflow and ticket category meanings described below. The research roadmap's later phases are not authorized by this exception.
+
 | Source | Responsibility |
 |---|---|
 | `docs/SDD.md` | Product vision, system boundaries, invariants, logical architecture, and phase roadmap. |

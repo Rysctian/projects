@@ -1,6 +1,6 @@
 # Phase 01 — Secure internal ticketing core
 
-Status: P — proposed, unapproved. Prerequisites: none. Goal: a staff member can execute one complete, authorized ticket lifecycle in an isolated project.
+Status: authorized for implementation for new projects on 2026-10-21; existing projects and history remain on their legacy process. See [integration decision](../../changes/2026-10-21-secure-core.md) for the schema mapping and compatibility boundary. Prerequisites: none. Goal: a staff member can execute one complete, authorized ticket lifecycle in an isolated project.
 
 ## Evidence and scope
 

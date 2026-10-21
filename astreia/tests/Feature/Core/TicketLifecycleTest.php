@@ -11,7 +11,7 @@ uses(RefreshDatabase::class);
 
 beforeEach(function () {
     $this->admin = User::factory()->create(['is_system_admin' => true]);
-    $this->actingAs($this->admin)->post('/projects', ['code' => 'HRIS', 'name' => 'HRIS']);
+    legacyProjectFixture($this->admin);
     $this->project = Project::where('code', 'HRIS')->firstOrFail();
     $this->path = '/projects/'.$this->project->id.'/tickets';
     $this->worker = User::factory()->create();

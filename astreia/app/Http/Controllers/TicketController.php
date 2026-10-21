@@ -24,7 +24,7 @@ class TicketController extends Controller
     public function show(Request $request, Project $project, int $ticket): Response
     {
         ProjectAccess::authorize($request->user(), $project, 'tickets.view', false);
-        $ticket = $project->tickets()->with(['stage', 'workflow', 'assignee:id,name', 'reporter:id,name', 'module', 'labels', 'project'])->findOrFail($ticket);
+        $ticket = $project->tickets()->with(['stage', 'workflow', 'assignee:id,name,is_active', 'reporter:id,name', 'module', 'labels', 'project', 'resolution'])->findOrFail($ticket);
         $transitions = $ticket->workflow->transitions()->where('from_stage_id', $ticket->stage_id)->with(['toStage', 'requiredPermission'])->get()
             ->filter(fn ($edge) => (! $edge->requiredPermission || $request->user()->hasProjectPermission($project, $edge->requiredPermission->key))
                 && ($edge->toStage->type !== 'closed' || $request->user()->hasProjectPermission($project, 'tickets.close')))->values();
@@ -40,6 +40,9 @@ class TicketController extends Controller
             'categories' => Ticket::CATEGORIES, 'priorities' => Ticket::PRIORITIES,
             'capabilities' => ProjectAccess::capabilities($request->user(), $project), 'labels' => $project->labels()->orderBy('name')->get(),
             'uploadsEnabled' => (bool) config('astreia.attachments.enabled'),
+            'workTypes' => $project->workTypes()->where('is_active', true)->orderBy('id')->get(),
+            'priorityOptions' => $project->priorities()->where('is_active', true)->orderBy('rank')->get(),
+            'resolutions' => $project->resolutions()->where('is_active', true)->orderBy('id')->get(),
         ]);
     }
 
@@ -73,6 +76,7 @@ class TicketController extends Controller
 
     public function comment(Request $request, Project $project, int $ticket, TicketService $service): RedirectResponse
     {
+        abort_if($project->isCore(), 403, 'Comments are not enabled for core projects.');
         DB::transaction(function () use ($request, $project, $ticket, $service) {
             $project = Project::lockForUpdate()->findOrFail($project->id);
             ProjectAccess::authorize($request->user(), $project, 'tickets.comment');

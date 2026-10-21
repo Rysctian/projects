@@ -12,7 +12,7 @@ uses(RefreshDatabase::class);
 
 beforeEach(function () {
     $this->admin = User::factory()->create(['is_system_admin' => true]);
-    $this->actingAs($this->admin)->post('/projects', ['code' => 'HRIS', 'name' => 'HRIS']);
+    legacyProjectFixture($this->admin);
     $this->project = Project::firstOrFail();
     $this->path = '/projects/'.$this->project->id;
     $this->post($this->path.'/tickets', ['title' => 'Client inquiry', 'description' => 'Investigate access.', 'category' => 'support', 'priority' => 'normal']);

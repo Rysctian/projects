@@ -1,6 +1,6 @@
 # Proposed development roadmap
 
-Research draft, 2026-10-21. Every phase is **proposed and unapproved**. This roadmap is independent of any existing project specification, and does not describe existing implementation progress. Evidence labels and boundaries: [OVERVIEW](OVERVIEW.md).
+Research draft, 2026-10-21. Phase 01 is authorized for new projects under the [integration decision](../changes/2026-10-21-secure-core.md); Phases 02–07 remain **proposed and unapproved**. This roadmap does not by itself describe implementation progress. Evidence labels and boundaries: [OVERVIEW](OVERVIEW.md).
 
 ## Why these seven milestones
 

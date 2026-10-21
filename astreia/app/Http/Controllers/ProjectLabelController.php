@@ -14,6 +14,7 @@ class ProjectLabelController extends Controller
 {
     public function store(Request $request, Project $project): RedirectResponse
     {
+        abort_if($project->isCore(), 403, 'Labels are not enabled for core projects.');
         DB::transaction(function () use ($request, $project) {
             $project = Project::lockForUpdate()->findOrFail($project->id);
             ProjectAccess::authorize($request->user(), $project, 'labels.manage');

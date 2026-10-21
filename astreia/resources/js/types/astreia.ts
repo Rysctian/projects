@@ -5,9 +5,20 @@ export type Project = {
     name: string;
     description: string | null;
     status: string;
+    process_model: 'core' | 'legacy';
+    timezone: string;
+    lock_version: number;
     current_workflow_id?: number | null;
 };
 export type Stage = { id: number; name: string; type: string };
+export type CatalogOption = {
+    id: number;
+    code: string;
+    name: string;
+    is_active: boolean;
+};
+export type PriorityOption = CatalogOption & { rank: number };
+export type Resolution = CatalogOption & { outcome: string };
 export type Capabilities = Record<string, boolean>;
 export type PaginationLink = {
     url: string | null;
@@ -25,6 +36,13 @@ export type TicketSummary = {
     title: string | null;
     category: string;
     priority: string;
+    work_type_id?: number | null;
+    priority_id?: number | null;
+    resolution_id?: number | null;
+    work_type?: CatalogOption | null;
+    resolution?: Resolution | null;
+    needs_reassignment?: boolean;
+    closed_at?: string | null;
     stage: Stage;
     assigned_to: number | null;
     assignee: Person | null;

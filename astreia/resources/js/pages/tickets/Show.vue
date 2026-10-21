@@ -15,6 +15,9 @@ import { activitySummary } from './activity';
 import type {
     Activity,
     Capabilities,
+    CatalogOption,
+    PriorityOption,
+    Resolution,
     Label,
     Module,
     Person,
@@ -44,15 +47,29 @@ const props = defineProps<{
     modules: Module[];
     categories: string[];
     priorities: string[];
+    workTypes?: CatalogOption[];
+    priorityOptions?: PriorityOption[];
+    resolutions?: Resolution[];
     capabilities: Capabilities;
     labels: Label[];
     uploadsEnabled: boolean;
 }>();
 const base = `/projects/${props.project.id}/tickets/${props.ticket.id}`;
+const core = computed(() => props.project.process_model === 'core');
+const archived = computed(
+    () => core.value && props.project.status === 'archived',
+);
 const editing = ref(false);
 const commenting = ref(false);
 const uploading = ref(false);
-const tab = ref<'comments' | 'activity' | 'verification'>('comments');
+const tab = ref<'comments' | 'activity' | 'verification'>(
+    core.value ? 'activity' : 'comments',
+);
+const tabs = computed(() =>
+    core.value
+        ? (['activity'] as const)
+        : (['comments', 'activity', 'verification'] as const),
+);
 function values() {
     return {
         lock_version: props.ticket.lock_version,
@@ -60,6 +77,8 @@ function values() {
         description: props.ticket.description ?? '',
         category: props.ticket.category,
         priority: props.ticket.priority,
+        work_type_id: props.ticket.work_type_id ?? null,
+        priority_id: props.ticket.priority_id ?? null,
         assigned_to: props.ticket.assigned_to,
         module_id: props.ticket.module_id,
         estimate_minutes: props.ticket.estimate_minutes,
@@ -73,13 +92,54 @@ const comment = useForm({ body: '' });
 const upload = useForm({ file: null as File | null });
 const fileInput = ref<HTMLInputElement | null>(null);
 const activityRows = computed(() =>
-    props.activities.map((activity) => ({
-        ...activity,
-        ...activitySummary(activity.activity_type, activity.payload),
-    })),
+    props.activities.map((activity) => {
+        const summary = activitySummary(
+            activity.activity_type,
+            activity.payload,
+        );
+        if (core.value) {
+            const payload = activity.payload as {
+                resolution?: { name?: string; outcome?: string } | null;
+                previous?: {
+                    resolution_id?: number | null;
+                    completion_notes?: string | null;
+                    closed_at?: string | null;
+                };
+            };
+            if (typeof payload.resolution?.name === 'string')
+                summary.details.push(`Resolution: ${payload.resolution.name}`);
+            if (typeof payload.resolution?.outcome === 'string')
+                summary.details.push(`Outcome: ${payload.resolution.outcome}`);
+            if (payload.previous?.resolution_id) {
+                const resolution = props.resolutions?.find(
+                    (item) => item.id === payload.previous?.resolution_id,
+                );
+                summary.details.push(
+                    `Previous resolution: ${resolution?.name ?? `#${payload.previous.resolution_id}`}`,
+                );
+                if (resolution)
+                    summary.details.push(
+                        `Previous outcome: ${resolution.outcome}`,
+                    );
+            }
+            if (typeof payload.previous?.completion_notes === 'string')
+                summary.details.push(
+                    `Previous completion notes: ${payload.previous.completion_notes}`,
+                );
+            if (typeof payload.previous?.closed_at === 'string')
+                summary.details.push(
+                    `Previously resolved: ${date(payload.previous.closed_at)}`,
+                );
+        }
+        return { ...activity, ...summary };
+    }),
 );
-const canEdit = computed(() => !!props.capabilities['tickets.edit']);
-const canAssign = computed(() => !!props.capabilities['tickets.assign']);
+const canEdit = computed(
+    () => !archived.value && !!props.capabilities['tickets.edit'],
+);
+const canAssign = computed(
+    () => !archived.value && !!props.capabilities['tickets.assign'],
+);
 function sync() {
     Object.assign(form, values());
     form.defaults(values());
@@ -91,15 +151,27 @@ watch(
     },
 );
 function save() {
+    if (archived.value) return;
     form.transform((data) => {
         if (!canEdit.value)
             return {
                 lock_version: data.lock_version,
                 assigned_to: data.assigned_to,
             };
-        const { assigned_to, ...fields } = data;
+        const {
+            assigned_to,
+            category,
+            priority,
+            label_ids,
+            work_type_id,
+            priority_id,
+            ...fields
+        } = data;
         return {
             ...fields,
+            ...(core.value
+                ? { work_type_id, priority_id }
+                : { category, priority, label_ids }),
             ...(canAssign.value ? { assigned_to } : {}),
             estimate_minutes:
                 data.estimate_minutes === null ||
@@ -151,7 +223,10 @@ function size(bytes: number) {
 </script>
 <template>
     <PageFrame
-        :title="ticket.title || 'Untitled urgent intake'"
+        :title="
+            ticket.title ||
+            (core ? 'Untitled ticket' : 'Untitled urgent intake')
+        "
         :eyebrow="ticket.key"
         :back="`/projects/${project.id}`"
         :back-label="project.name"
@@ -182,6 +257,9 @@ function size(bytes: number) {
                         :errors="form.errors"
                         :reload-url="base"
                     /><TicketFields
+                        :core="core"
+                        :work-types="workTypes"
+                        :priority-options="priorityOptions"
                         :form="form"
                         :categories="categories"
                         :priorities="priorities"
@@ -189,9 +267,9 @@ function size(bytes: number) {
                         :assignees="eligibleAssignees"
                         :editable="canEdit"
                         :assignable="canAssign"
-                        :incomplete="ticket.is_intake_stub"
+                        :incomplete="!core && ticket.is_intake_stub"
                     />
-                    <fieldset v-if="canEdit && labels.length">
+                    <fieldset v-if="!core && canEdit && labels.length">
                         <legend class="mb-2 text-sm font-medium">Labels</legend>
                         <div class="flex flex-wrap gap-4">
                             <label
@@ -226,19 +304,35 @@ function size(bytes: number) {
         </template>
         <div class="flex flex-wrap items-center gap-2">
             <Badge>{{ ticket.stage.name }}</Badge
-            ><TicketBadges v-bind="ticket" /><span
+            ><Badge v-if="core" variant="outline">{{
+                priorityOptions?.find((item) => item.id === ticket.priority_id)
+                    ?.name ?? ticket.priority
+            }}</Badge
+            ><TicketBadges v-else v-bind="ticket" /><span
+                v-if="!core"
                 class="text-xs text-muted-foreground"
                 >Workflow v{{ ticket.workflow.version_number }} · Revision
                 {{ ticket.revision_number }}</span
             >
         </div>
         <div
-            v-if="ticket.is_intake_stub"
+            v-if="!core && ticket.is_intake_stub"
             class="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-sm"
         >
             Incomplete urgent intake. Add the actual title, description, and
             required details before moving this ticket forward.
         </div>
+        <p v-if="archived" class="rounded-lg border bg-muted px-4 py-3 text-sm">
+            This project is archived. Restore it before changing tickets.
+        </p>
+        <p
+            v-if="core && ticket.needs_reassignment"
+            role="status"
+            class="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-sm"
+        >
+            This ticket needs reassignment. Its current assignee is no longer
+            eligible to work in this project.
+        </p>
         <div class="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
             <div class="min-w-0 space-y-6">
                 <section class="panel space-y-5">
@@ -274,7 +368,7 @@ function size(bytes: number) {
                         </p>
                     </div>
                     <div
-                        v-if="ticket.labels.length"
+                        v-if="!core && ticket.labels.length"
                         class="flex flex-wrap gap-2 border-t pt-4"
                     >
                         <Badge
@@ -287,18 +381,38 @@ function size(bytes: number) {
                 </section>
                 <section
                     v-if="
-                        ticket.completion_notes || ticket.documentation_impact
+                        ticket.completion_notes ||
+                        (core
+                            ? ticket.resolution || ticket.closed_at
+                            : ticket.documentation_impact)
                     "
                     class="panel space-y-3"
                 >
                     <h2 class="font-semibold">Completion record</h2>
+                    <template v-if="core">
+                        <p v-if="ticket.resolution" class="text-sm">
+                            Resolution: {{ ticket.resolution.name }}
+                        </p>
+                        <p v-if="ticket.resolution" class="text-sm">
+                            Outcome: {{ ticket.resolution.outcome }}
+                        </p>
+                        <p v-if="ticket.closed_at" class="text-sm">
+                            Resolved:
+                            <time :datetime="ticket.closed_at">{{
+                                date(ticket.closed_at)
+                            }}</time>
+                        </p>
+                    </template>
                     <p
                         v-if="ticket.completion_notes"
                         class="text-sm whitespace-pre-wrap"
                     >
                         {{ ticket.completion_notes }}
                     </p>
-                    <p v-if="ticket.documentation_impact" class="text-sm">
+                    <p
+                        v-if="!core && ticket.documentation_impact"
+                        class="text-sm"
+                    >
                         <span class="font-medium">Documentation:</span>
                         {{
                             ticket.documentation_impact === 'required'
@@ -307,7 +421,7 @@ function size(bytes: number) {
                         }}
                     </p>
                     <p
-                        v-if="ticket.documentation_impact_note"
+                        v-if="!core && ticket.documentation_impact_note"
                         class="text-sm whitespace-pre-wrap text-muted-foreground"
                     >
                         {{ ticket.documentation_impact_note }}
@@ -316,15 +430,13 @@ function size(bytes: number) {
                 <section class="panel">
                     <div
                         role="tablist"
-                        aria-label="Ticket collaboration"
+                        :aria-label="
+                            core ? 'Ticket history' : 'Ticket collaboration'
+                        "
                         class="mb-5 flex gap-1 border-b pb-3"
                     >
                         <Button
-                            v-for="item in [
-                                'comments',
-                                'activity',
-                                'verification',
-                            ] as const"
+                            v-for="item in tabs"
                             :id="`tab-${item}`"
                             :key="item"
                             role="tab"
@@ -344,7 +456,7 @@ function size(bytes: number) {
                         >
                     </div>
                     <div
-                        v-if="tab === 'comments'"
+                        v-if="!core && tab === 'comments'"
                         id="panel-comments"
                         role="tabpanel"
                         aria-labelledby="tab-comments"
@@ -418,7 +530,7 @@ function size(bytes: number) {
                         </FormSurface>
                     </div>
                     <div
-                        v-else-if="tab === 'activity'"
+                        v-else-if="core || tab === 'activity'"
                         id="panel-activity"
                         role="tabpanel"
                         aria-labelledby="tab-activity"
@@ -504,7 +616,7 @@ function size(bytes: number) {
                         </p>
                     </div>
                 </section>
-                <section class="panel space-y-4">
+                <section v-if="!core" class="panel space-y-4">
                     <h2 class="font-semibold">Attachments</h2>
                     <ul v-if="attachments.length" class="divide-y">
                         <li
@@ -584,17 +696,35 @@ function size(bytes: number) {
                         </dd>
                         <dt class="text-muted-foreground">Reporter</dt>
                         <dd class="text-right">{{ ticket.reporter.name }}</dd>
-                        <dt class="text-muted-foreground">Category</dt>
+                        <dt class="text-muted-foreground">
+                            {{ core ? 'Work type' : 'Category' }}
+                        </dt>
                         <dd class="text-right capitalize">
-                            {{ ticket.category.replaceAll('_', ' ') }}
+                            {{
+                                core
+                                    ? (ticket.work_type?.name ??
+                                      workTypes?.find(
+                                          (item) =>
+                                              item.id === ticket.work_type_id,
+                                      )?.name ??
+                                      ticket.category)
+                                    : ticket.category.replaceAll('_', ' ')
+                            }}
                         </dd>
-                        <dt class="text-muted-foreground">Module</dt>
+                        <dt class="text-muted-foreground">
+                            {{ core ? 'Component' : 'Module' }}
+                        </dt>
                         <dd class="text-right">
                             {{ ticket.module?.name ?? 'None' }}
                         </dd>
                         <dt class="text-muted-foreground">Due date</dt>
                         <dd class="text-right">
                             {{ ticket.due_date?.slice(0, 10) ?? 'Not set' }}
+                            <span
+                                v-if="core"
+                                class="block text-xs text-muted-foreground"
+                                >{{ project.timezone }}</span
+                            >
                         </dd>
                         <dt class="text-muted-foreground">Estimate</dt>
                         <dd class="text-right">
@@ -617,6 +747,9 @@ function size(bytes: number) {
                     </dl>
                 </section>
                 <TicketActions
+                    :core="core"
+                    :archived="archived"
+                    :resolutions="resolutions"
                     :base="base"
                     :ticket="ticket"
                     :transitions="transitions"

@@ -5,6 +5,7 @@ namespace App\Models;
 use Database\Factories\AuditLogFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Str;
 
 class AuditLog extends Model
 {
@@ -18,7 +19,7 @@ class AuditLog extends Model
     /** @return array<string, string> */
     protected function casts(): array
     {
-        return ['before_json' => 'array', 'after_json' => 'array', 'created_at' => 'immutable_datetime'];
+        return ['before_json' => 'array', 'after_json' => 'array', 'created_at' => 'immutable_datetime', 'occurred_at' => 'immutable_datetime', 'recorded_at' => 'immutable_datetime'];
     }
 
     /**
@@ -36,6 +37,9 @@ class AuditLog extends Model
             'before_json' => $before,
             'after_json' => $after,
             'created_at' => now(),
+            'occurred_at' => now(),
+            'recorded_at' => now(),
+            'correlation_id' => (string) Str::uuid(),
         ]);
     }
 }

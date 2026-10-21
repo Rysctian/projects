@@ -38,13 +38,45 @@ class WorkflowService
 
     public function initialize(Project $project, User $actor): void
     {
+        if ($project->isCore()) {
+            $this->initializeCore($project, $actor);
+
+            return;
+        }
         $draft = $this->saveDraft($project, $actor, self::template());
         $this->publish($project, $actor, $draft);
+    }
+
+    private function initializeCore(Project $project, User $actor): void
+    {
+        foreach (['task' => 'Task', 'bug' => 'Bug', 'story' => 'Story'] as $code => $name) {
+            $project->workTypes()->firstOrCreate(['code' => $code], ['name' => $name]);
+        }
+        foreach (['low', 'normal', 'high', 'urgent'] as $rank => $code) {
+            $project->priorities()->firstOrCreate(['code' => $code], ['name' => ucfirst($code), 'rank' => $rank]);
+        }
+        foreach (['done' => ['Done', 'success'], 'cancelled' => ['Cancelled', 'cancel'], 'duplicate' => ['Duplicate', 'duplicate'], 'other' => ['Other', 'other']] as $code => [$name, $outcome]) {
+            $project->resolutions()->firstOrCreate(['code' => $code], compact('name', 'outcome'));
+        }
+        $workflow = $project->workflows()->create(['version_number' => 1, 'state' => 'published', 'published_at' => now()]);
+        $stages = [];
+        foreach (['open' => ['Open', 'intake'], 'in_progress' => ['In progress', 'work'], 'resolved' => ['Resolved', 'closed']] as $key => [$name, $type]) {
+            $stages[$key] = $workflow->stages()->create(['key' => $key, 'name' => $name, 'type' => $type, 'sort_order' => count($stages), 'is_initial' => $key === 'open', 'is_active' => true]);
+        }
+        foreach ([['open', 'in_progress'], ['in_progress', 'resolved'], ['resolved', 'open']] as [$from, $to]) {
+            $workflow->transitions()->create(['from_stage_id' => $workflow->stages()->where('key', $from)->firstOrFail()->id, 'to_stage_id' => $workflow->stages()->where('key', $to)->firstOrFail()->id,
+                'required_permission_id' => Permission::where('key', $to === 'in_progress' ? 'tickets.transition' : 'tickets.close')->value('id'),
+                'requires_reason' => $from === 'resolved', 'requires_signoff' => false]);
+        }
+        $project->update(['current_workflow_id' => $workflow->id]);
+        AuditLog::record($actor, $workflow, 'workflow.initialized', after: ['process_model' => 'core', 'version' => 1], projectId: $project->id);
     }
 
     /** @param array<string, mixed> $input */
     public function saveDraft(Project $project, User $actor, array $input): ProjectWorkflow
     {
+        abort_if($project->isCore(), 403, 'Workflow editing is not enabled for core projects.');
+
         return DB::transaction(function () use ($project, $actor, $input) {
             $project = Project::lockForUpdate()->findOrFail($project->id);
             ProjectAccess::authorize($actor, $project, 'workflows.manage');
@@ -92,6 +124,8 @@ class WorkflowService
 
     public function publish(Project $project, User $actor, ProjectWorkflow $workflow): ProjectWorkflow
     {
+        abort_if($project->isCore(), 403, 'Workflow editing is not enabled for core projects.');
+
         return DB::transaction(function () use ($project, $actor, $workflow) {
             $project = Project::lockForUpdate()->findOrFail($project->id);
             ProjectAccess::authorize($actor, $project, 'workflows.manage');

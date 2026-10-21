@@ -13,6 +13,9 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 /**
  * @property CarbonImmutable|null $due_date
  * @property list<string>|null $acceptance_criteria
+ * @property int|null $work_type_id
+ * @property int|null $priority_id
+ * @property int|null $resolution_id
  */
 class Ticket extends Model
 {
@@ -27,7 +30,19 @@ class Ticket extends Model
 
     protected $guarded = ['id'];
 
-    protected $appends = ['key'];
+    protected $appends = ['key', 'needs_reassignment'];
+
+    public function getNeedsReassignmentAttribute(): bool
+    {
+        return $this->closed_at === null && $this->assigned_to !== null
+            && (! $this->assignee || ! $this->assignee->is_active || ! $this->assignee->hasProjectPermission($this->project, 'tickets.work'));
+    }
+
+    /** @return BelongsTo<Resolution, $this> */
+    public function resolution(): BelongsTo
+    {
+        return $this->belongsTo(Resolution::class);
+    }
 
     protected $attributes = ['revision_number' => 1, 'lock_version' => 1, 'stage_visit' => 1, 'verification_cycle' => 1, 'is_blocked' => false, 'is_cancelled' => false, 'is_intake_stub' => false];
 

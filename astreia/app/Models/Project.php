@@ -15,7 +15,30 @@ class Project extends Model
 
     protected $guarded = ['id', 'code'];
 
-    protected $attributes = ['status' => 'active'];
+    protected $attributes = ['status' => 'active', 'process_model' => 'legacy', 'timezone' => 'UTC', 'lock_version' => 1];
+
+    public function isCore(): bool
+    {
+        return $this->process_model === 'core';
+    }
+
+    /** @return HasMany<WorkType, $this> */
+    public function workTypes(): HasMany
+    {
+        return $this->hasMany(WorkType::class);
+    }
+
+    /** @return HasMany<Priority, $this> */
+    public function priorities(): HasMany
+    {
+        return $this->hasMany(Priority::class);
+    }
+
+    /** @return HasMany<Resolution, $this> */
+    public function resolutions(): HasMany
+    {
+        return $this->hasMany(Resolution::class);
+    }
 
     /** @return array<string, string> */
     protected function casts(): array
@@ -64,10 +87,10 @@ class Project extends Model
     {
         if (! $user->is_active) {
             $query->whereRaw('1 = 0');
-        } elseif (! $user->is_system_admin) {
+        } else {
             $ids = $user->projectMemberships()->where('is_active', true)->pluck('project_id');
             $allowed = static::whereIn('id', $ids)->get()->filter(fn ($project) => $user->hasProjectPermission($project, 'project.view'))->pluck('id');
-            $query->whereIn('id', $allowed);
+            $query->where(fn ($q) => $q->whereIn('id', $allowed)->when($user->is_system_admin, fn ($q) => $q->orWhere('process_model', 'legacy')));
         }
     }
 }

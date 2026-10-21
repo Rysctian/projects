@@ -9,7 +9,7 @@ uses(RefreshDatabase::class);
 
 test('projects start with a usable published template and new publications retain old versions', function () {
     $admin = User::factory()->create(['is_system_admin' => true]);
-    $this->actingAs($admin)->post('/projects', ['code' => 'HRIS', 'name' => 'HRIS'])->assertRedirect();
+    legacyProjectFixture($admin);
     $project = Project::where('code', 'HRIS')->firstOrFail();
     expect($project->current_workflow_id)->not->toBeNull();
     $original = $project->workflows()->where('id', $project->current_workflow_id)->firstOrFail();
@@ -25,7 +25,7 @@ test('projects start with a usable published template and new publications retai
 
 test('invalid graphs cannot publish or change the active workflow', function () {
     $admin = User::factory()->create(['is_system_admin' => true]);
-    $this->actingAs($admin)->post('/projects', ['code' => 'HRIS', 'name' => 'HRIS']);
+    legacyProjectFixture($admin);
     $project = Project::firstOrFail();
     $originalId = $project->current_workflow_id;
     $graph = WorkflowService::template();
@@ -38,7 +38,7 @@ test('invalid graphs cannot publish or change the active workflow', function () 
 
 test('workflow endpoints must belong to the configured version', function () {
     $admin = User::factory()->create(['is_system_admin' => true]);
-    $this->actingAs($admin)->post('/projects', ['code' => 'HRIS', 'name' => 'HRIS']);
+    legacyProjectFixture($admin);
     $project = Project::firstOrFail();
     $graph = WorkflowService::template();
     $graph['transitions'][0]['to_key'] = 'another_project_stage';
@@ -47,7 +47,7 @@ test('workflow endpoints must belong to the configured version', function () {
 
 test('publication rejects signoff gates on stages where signoffs cannot be recorded', function () {
     $admin = User::factory()->create(['is_system_admin' => true]);
-    $this->actingAs($admin)->post('/projects', ['code' => 'HRIS', 'name' => 'HRIS']);
+    legacyProjectFixture($admin);
     $project = Project::firstOrFail();
     $graph = WorkflowService::template();
     $graph['transitions'][2]['requires_signoff'] = true;
@@ -58,7 +58,7 @@ test('publication rejects signoff gates on stages where signoffs cannot be recor
 
 test('publication requires a reachable verification checkpoint for development tickets', function () {
     $admin = User::factory()->create(['is_system_admin' => true]);
-    $this->actingAs($admin)->post('/projects', ['code' => 'HRIS', 'name' => 'HRIS']);
+    legacyProjectFixture($admin);
     $project = Project::firstOrFail();
     $graph = WorkflowService::template();
     $graph['stages'][3]['type'] = 'review';

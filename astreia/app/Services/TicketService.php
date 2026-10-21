@@ -7,6 +7,7 @@ use App\Models\Ticket;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
@@ -35,7 +36,7 @@ class TicketService
                 'stage_id' => $initial->id, 'created_by' => $actor->id,
                 'is_intake_stub' => empty($data['title']) || empty($data['description']),
             ]);
-            $this->activity($ticket, $actor, 'created', ['key' => $ticket->key, 'stage' => $initial->name, 'to_stage_id' => $initial->id, 'to_visit' => 1, 'incomplete_intake' => $ticket->is_intake_stub]);
+            $this->activity($ticket, $actor, 'created', ['key' => $ticket->key, 'stage' => $initial->name, 'to_stage_id' => $initial->id, 'to_visit' => 1, 'incomplete_intake' => $ticket->is_intake_stub, 'after' => $data]);
 
             return $ticket;
         });
@@ -44,9 +45,16 @@ class TicketService
     /** @param array<string, mixed> $input */
     public function update(Project $project, User $actor, Ticket $ticket, array $input): Ticket
     {
+        if ($project->isCore()) {
+            Validator::make($input, array_fill_keys(['stage_id', 'workflow_id', 'resolution_id', 'closed_at', 'closed_by', 'created_by', 'project_id', 'number', 'category', 'priority', 'is_cancelled', 'is_intake_stub'], 'prohibited'))->validate();
+        }
+
         return $this->mutate($project, $actor, $ticket, $input, function (Ticket $ticket, Project $project) use ($actor, $input) {
             $this->editable($ticket);
             $merged = [...$ticket->only(['title', 'description', 'category', 'priority', 'module_id', 'assigned_to', 'estimate_minutes', 'due_date', 'acceptance_criteria']), ...$input, 'is_intake_stub' => $ticket->is_intake_stub];
+            if ($project->isCore()) {
+                $merged = [...$ticket->only(['work_type_id', 'priority_id']), ...$merged];
+            }
             if (! array_key_exists('due_date', $input)) {
                 $merged['due_date'] = $ticket->due_date?->format('Y-m-d');
             }
@@ -67,7 +75,7 @@ class TicketService
             if (! empty($data['assigned_to'])) {
                 $this->eligibleAssignee($project, (int) $data['assigned_to']);
             }
-            $before = $ticket->only(['title', 'description', 'category', 'priority', 'module_id', 'assigned_to', 'estimate_minutes', 'due_date', 'acceptance_criteria', 'revision_number']);
+            $before = $ticket->only(['title', 'description', 'category', 'priority', 'work_type_id', 'priority_id', 'module_id', 'assigned_to', 'estimate_minutes', 'due_date', 'acceptance_criteria', 'revision_number']);
             $labelIds = $data['label_ids'] ?? null;
             unset($data['label_ids'], $data['is_intake_stub']);
             $ticket->fill($data);
@@ -91,11 +99,21 @@ class TicketService
     {
         return $this->mutate($project, $actor, $ticket, $input, function (Ticket $ticket, Project $project) use ($actor, $input) {
             ProjectAccess::authorize($actor, $project, 'tickets.transition');
+            if ($project->isCore() && $ticket->closed_at !== null) {
+                $edge = $ticket->workflow->transitions()->whereKey($input['transition_id'] ?? null)->where('from_stage_id', $ticket->stage_id)->whereHas('toStage', fn ($q) => $q->where('is_initial', true))->first();
+                $this->require($edge !== null, 'transition_id', 'Choose the configured reopen transition.');
+                ProjectAccess::authorize($actor, $project, 'tickets.close');
+                $data = Validator::make($input, ['reason' => 'required|string|max:10000'])->validate();
+                $this->reopenCore($ticket, $actor, $data['reason']);
+
+                return;
+            }
             $this->editable($ticket);
             $this->require(! $ticket->is_blocked, 'stage_id', 'Resume the blocked ticket before advancing it.');
             $data = Validator::make($input, [
                 'transition_id' => 'required|integer', 'reason' => 'nullable|string|max:10000', 'completion_notes' => 'nullable|string|max:20000',
                 'documentation_impact' => ['nullable', Rule::in(['required', 'not_required'])], 'documentation_impact_note' => 'nullable|string|max:10000',
+                'resolution_id' => ['nullable', 'integer', Rule::exists('resolutions', 'id')->where('project_id', $project->id)->where('is_active', true)],
             ])->validate();
             $edge = $ticket->workflow->transitions()->where('id', $data['transition_id'])->where('from_stage_id', $ticket->stage_id)->with(['toStage', 'requiredPermission'])->first();
             $this->require($edge !== null, 'transition_id', 'That transition is not allowed from the current stage.');
@@ -103,7 +121,7 @@ class TicketService
             if ($edge->requiredPermission) {
                 ProjectAccess::authorize($actor, $project, $edge->requiredPermission->key);
             }
-            if ($ticket->stage->type === 'work' && ! $actor->is_system_admin && ! $actor->hasProjectPermission($project, 'tickets.assign')) {
+            if ($ticket->stage->type === 'work' && ($project->isCore() || ! $actor->is_system_admin) && ! $actor->hasProjectPermission($project, 'tickets.assign')) {
                 $this->require($ticket->assigned_to === $actor->id && $actor->hasProjectPermission($project, 'tickets.work'), 'assigned_to', 'Only the eligible assignee or an authorized assignment manager can advance work.');
             }
             if ($edge->requires_reason) {
@@ -134,6 +152,9 @@ class TicketService
                 $ticket->documentation_impact_note = $data['documentation_impact_note'] ?? null;
                 $ticket->closed_by = $actor->id;
                 $ticket->closed_at = now();
+                if ($project->isCore()) {
+                    $ticket->resolution_id = $data['resolution_id'];
+                }
             }
             $from = $ticket->stage;
             $fromVisit = $ticket->stage_visit;
@@ -143,6 +164,7 @@ class TicketService
             $this->activity($ticket, $actor, 'transitioned', [
                 'from' => $from->name, 'to' => $edge->toStage->name, 'from_stage_id' => $from->id, 'to_stage_id' => $ticket->stage_id,
                 'from_visit' => $fromVisit, 'to_visit' => $ticket->stage_visit, 'reason' => $data['reason'] ?? null, 'requires_signoff' => $edge->requires_signoff,
+                'resolution_id' => $ticket->resolution_id, 'resolution' => $ticket->resolution?->only(['code', 'name', 'outcome']), 'completion_notes' => $ticket->completion_notes,
                 'invalidated_stage_ids' => $returnPath ? $ticket->workflow->stages()
                     ->whereIn('type', ['review', 'verification', 'pre_close'])
                     ->where(fn ($query) => $query->where('type', 'verification')->orWhere('sort_order', '>=', $edge->toStage->sort_order))->pluck('id')->all() : [],
@@ -153,6 +175,8 @@ class TicketService
     /** @param array<string, mixed> $input */
     public function signoff(Project $project, User $actor, Ticket $ticket, array $input): Ticket
     {
+        abort_if($project->isCore(), 403, 'Verification checkpoints are not enabled for core projects.');
+
         return $this->mutate($project, $actor, $ticket, $input, function (Ticket $ticket, Project $project) use ($actor, $input) {
             ProjectAccess::authorize($actor, $project, 'tickets.verify');
             $this->editable($ticket);
@@ -180,6 +204,14 @@ class TicketService
             ProjectAccess::authorize($actor, $project, 'tickets.transition');
             $data = Validator::make($input, ['action' => ['required', Rule::in(['block', 'resume', 'cancel', 'reopen'])], 'reason' => 'required|string|max:10000'])->validate();
             $action = $data['action'];
+            if ($project->isCore()) {
+                $this->require($action === 'reopen', 'action', 'Use a resolution to complete core tickets.');
+                ProjectAccess::authorize($actor, $project, 'tickets.close');
+                $this->require($ticket->closed_at !== null, 'action', 'Only resolved tickets can be reopened.');
+                $this->reopenCore($ticket, $actor, $data['reason']);
+
+                return;
+            }
             if ($action === 'reopen') {
                 ProjectAccess::authorize($actor, $project, 'tickets.close');
                 $this->require($ticket->closed_at !== null || $ticket->is_cancelled, 'action', 'Only closed or cancelled tickets can be reopened.');
@@ -246,15 +278,23 @@ class TicketService
      */
     private function validateFields(Project $project, array $input, bool $creating): array
     {
-        $stub = $creating ? filter_var($input['is_intake_stub'] ?? false, FILTER_VALIDATE_BOOL) : (bool) ($input['is_intake_stub'] ?? false);
+        $stub = ! $project->isCore() && ($creating ? filter_var($input['is_intake_stub'] ?? false, FILTER_VALIDATE_BOOL) : (bool) ($input['is_intake_stub'] ?? false));
         $data = Validator::make($input, [
             'title' => [$stub ? 'nullable' : 'required', 'string', 'max:255'], 'description' => [$stub ? 'nullable' : 'required', 'string', 'max:100000'],
-            'category' => ['required', Rule::in(Ticket::CATEGORIES)], 'priority' => ['required', Rule::in(Ticket::PRIORITIES)],
-            'module_id' => ['nullable', 'integer', Rule::exists('modules', 'id')->where('project_id', $project->id)],
+            ...($project->isCore() ? [
+                'work_type_id' => ['required', 'integer', Rule::exists('work_types', 'id')->where('project_id', $project->id)->where('is_active', true)],
+                'priority_id' => ['required', 'integer', Rule::exists('priorities', 'id')->where('project_id', $project->id)->where('is_active', true)],
+            ] : ['category' => ['required', Rule::in(Ticket::CATEGORIES)], 'priority' => ['required', Rule::in(Ticket::PRIORITIES)]]),
+            'module_id' => ['nullable', 'integer', Rule::exists('modules', 'id')->where('project_id', $project->id)->when($project->isCore(), fn ($rule) => $rule->where('status', 'active'))],
             'assigned_to' => 'nullable|integer', 'estimate_minutes' => 'nullable|integer|min:0|max:4294967295', 'due_date' => 'nullable|date_format:Y-m-d',
             'acceptance_criteria' => 'sometimes|array|max:100', 'acceptance_criteria.*' => 'required|string|max:2000',
             'label_ids' => 'sometimes|array|max:50', 'label_ids.*' => ['integer', 'distinct', Rule::exists('project_labels', 'id')->where('project_id', $project->id)],
         ])->validate();
+        if ($project->isCore()) {
+            $data['category'] = $project->workTypes()->whereKey($data['work_type_id'])->firstOrFail()->code;
+            $data['priority'] = $project->priorities()->whereKey($data['priority_id'])->firstOrFail()->code;
+            unset($data['label_ids']);
+        }
         $data['title'] = filled($data['title'] ?? null) ? trim($data['title']) : null;
         $data['description'] = filled($data['description'] ?? null) ? trim($data['description']) : null;
         $this->require(! $stub || ($data['category'] === 'support' && $data['priority'] === 'urgent') || ! $creating, 'is_intake_stub', 'Only urgent support intake may omit required details.');
@@ -272,7 +312,7 @@ class TicketService
     private function ready(Ticket $ticket, Project $project): void
     {
         $this->require(! $ticket->is_intake_stub && filled($ticket->title) && filled($ticket->description), 'title', 'Complete the ticket title and description before advancing.');
-        if (in_array($ticket->category, Ticket::DEVELOPMENT_CATEGORIES, true)) {
+        if (! $project->isCore() && in_array($ticket->category, Ticket::DEVELOPMENT_CATEGORIES, true)) {
             $this->require(count($ticket->acceptance_criteria ?? []) > 0, 'acceptance_criteria', 'Add acceptance criteria before work becomes ready.');
         }
         $this->require($ticket->assigned_to !== null, 'assigned_to', 'Assign an eligible project member before work becomes ready.');
@@ -282,6 +322,12 @@ class TicketService
     /** @param array{completion_notes?: string|null, documentation_impact?: string|null, documentation_impact_note?: string|null, ...} $data */
     private function closure(Ticket $ticket, array $data): void
     {
+        if ($ticket->project->isCore()) {
+            $this->require(! empty($data['resolution_id']), 'resolution_id', 'Choose a resolution outcome.');
+            $this->require(filled($data['completion_notes'] ?? null), 'completion_notes', 'Completion notes are required for resolution.');
+
+            return;
+        }
         $this->require(filled($data['completion_notes'] ?? null), 'completion_notes', 'Completion notes are required for closure.');
         $visits = [$ticket->stage_id => $ticket->stage_visit];
         $invalidatedVisits = [];
@@ -319,7 +365,22 @@ class TicketService
     /** @param array<string, mixed> $payload */
     public function activity(Ticket $ticket, User $actor, string $type, array $payload): void
     {
-        $ticket->activities()->create(['actor_id' => $actor->id, 'activity_type' => $type, 'payload' => $payload, 'created_at' => now()]);
+        $ticket->activities()->create(['actor_id' => $actor->id, 'activity_type' => $type, 'payload' => [...$payload, 'requirement_revision' => $ticket->revision_number, 'stage_visit' => $ticket->stage_visit], 'created_at' => now(), 'occurred_at' => now(), 'recorded_at' => now(), 'correlation_id' => (string) Str::uuid()]);
+    }
+
+    private function reopenCore(Ticket $ticket, User $actor, string $reason): void
+    {
+        $previous = $ticket->only(['resolution_id', 'completion_notes', 'closed_at', 'closed_by', 'stage_id']);
+        $initial = $ticket->workflow->stages()->where('is_initial', true)->firstOrFail();
+        $ticket->stage_id = $initial->id;
+        $ticket->stage_visit++;
+        $ticket->resolution_id = null;
+        $ticket->closed_at = null;
+        $ticket->closed_by = null;
+        $ticket->completion_notes = null;
+        $ticket->unsetRelation('stage');
+        $ticket->unsetRelation('resolution');
+        $this->activity($ticket, $actor, 'reopened', ['reason' => $reason, 'previous' => $previous, 'to_stage_id' => $initial->id, 'to_visit' => $ticket->stage_visit]);
     }
 
     /** @phpstan-assert true $condition */

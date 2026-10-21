@@ -26,16 +26,7 @@ async function login(page: Page) {
 }
 
 async function createProject(page: Page, code: string) {
-    await page
-        .getByRole('button', { name: 'New project', exact: true })
-        .click();
-    await page.getByLabel('Code', { exact: false }).fill(code);
-    await page
-        .getByLabel('Name', { exact: true })
-        .fill(`${code} client system`);
-    await page
-        .getByRole('button', { name: 'Create project', exact: true })
-        .click();
+    await page.getByRole('link').filter({ hasText: `${code} legacy workspace` }).click();
     await expect(page).toHaveURL(/\/projects\/\d+$/);
     return new URL(page.url()).pathname;
 }

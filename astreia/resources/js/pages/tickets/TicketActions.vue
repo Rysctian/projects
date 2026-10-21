@@ -6,12 +6,20 @@ import FormSurface from '@/components/astreia/FormSurface.vue';
 import Field from '@/components/astreia/Field.vue';
 import FormErrors from '@/components/astreia/FormErrors.vue';
 import { Button } from '@/components/ui/button';
-import type { Capabilities, Ticket, TicketTransition } from '@/types/astreia';
+import type {
+    Capabilities,
+    Resolution,
+    Ticket,
+    TicketTransition,
+} from '@/types/astreia';
 const props = defineProps<{
     base: string;
     ticket: Ticket;
     transitions: TicketTransition[];
     capabilities: Capabilities;
+    core?: boolean;
+    resolutions?: Resolution[];
+    archived?: boolean;
 }>();
 const moving = ref(false);
 const verifying = ref(false);
@@ -21,6 +29,7 @@ const transition = useForm({
     transition_id: '' as number | '',
     reason: '',
     completion_notes: props.ticket.completion_notes ?? '',
+    resolution_id: null as number | null,
     documentation_impact: props.ticket.documentation_impact,
     documentation_impact_note: props.ticket.documentation_impact_note ?? '',
 });
@@ -36,6 +45,7 @@ const action = useForm({
     reason: '',
 });
 const destinations = computed(() =>
+    props.archived ||
     !props.capabilities['tickets.transition'] ||
     props.ticket.is_cancelled ||
     props.ticket.is_blocked ||
@@ -51,14 +61,20 @@ const selected = computed(() =>
     destinations.value.find((item) => item.id === transition.transition_id),
 );
 const closing = computed(() => selected.value?.to_stage.type === 'closed');
-const docDecision = computed(() =>
-    ['new_feature', 'enhancement'].includes(props.ticket.category),
+const docDecision = computed(
+    () =>
+        !props.core &&
+        ['new_feature', 'enhancement'].includes(props.ticket.category),
+);
+const activeResolutions = computed(() =>
+    (props.resolutions ?? []).filter((item) => item.is_active),
 );
 const actions = computed(() => {
     const values: {
         value: 'block' | 'resume' | 'cancel' | 'reopen';
         label: string;
     }[] = [];
+    if (props.archived) return values;
     if (props.ticket.is_cancelled || props.ticket.stage.type === 'closed') {
         if (
             props.capabilities['tickets.transition'] &&
@@ -67,6 +83,7 @@ const actions = computed(() => {
             values.push({ value: 'reopen', label: 'Reopen ticket' });
         return values;
     }
+    if (props.core) return values;
     if (props.capabilities['tickets.transition'])
         values.push(
             props.ticket.is_blocked
@@ -82,14 +99,31 @@ const actions = computed(() => {
     return values;
 });
 function move() {
+    if (props.archived) return;
     transition.lock_version = props.ticket.lock_version;
-    transition.post(`${props.base}/transitions`, {
-        preserveScroll: true,
-        onSuccess: () => {
-            transition.reset('transition_id', 'reason');
-            moving.value = false;
-        },
-    });
+    transition
+        .transform(
+            ({
+                resolution_id,
+                documentation_impact,
+                documentation_impact_note,
+                ...fields
+            }) => ({
+                ...fields,
+                ...(props.core
+                    ? closing.value
+                        ? { resolution_id }
+                        : {}
+                    : { documentation_impact, documentation_impact_note }),
+            }),
+        )
+        .post(`${props.base}/transitions`, {
+            preserveScroll: true,
+            onSuccess: () => {
+                transition.reset('transition_id', 'reason', 'resolution_id');
+                moving.value = false;
+            },
+        });
 }
 function verify() {
     signoff.lock_version = props.ticket.lock_version;
@@ -102,6 +136,7 @@ function verify() {
     });
 }
 function act() {
+    if (props.archived) return;
     action.lock_version = props.ticket.lock_version;
     action.post(`${props.base}/actions`, {
         preserveScroll: true,
@@ -117,12 +152,22 @@ function act() {
         <h2 class="flex items-center gap-2 text-sm font-semibold">
             <ArrowRight class="size-4 text-primary" />Workflow
         </h2>
-        <p class="muted">Move this work to its next checkpoint.</p>
+        <p class="muted">
+            {{
+                core
+                    ? 'Start work or resolve it with an outcome.'
+                    : 'Move this work to its next checkpoint.'
+            }}
+        </p>
         <FormSurface
             v-if="destinations.length"
             v-model:open="moving"
             title="Move ticket"
-            description="Choose the next stage. Workflow checks and sign-offs still apply."
+            :description="
+                core
+                    ? 'Choose the next stage. Active work requires an eligible assignee.'
+                    : 'Choose the next stage. Workflow checks and sign-offs still apply.'
+            "
             trigger="Move ticket"
             :busy="transition.processing"
         >
@@ -137,6 +182,7 @@ function act() {
                 /><Field label="Allowed destination"
                     ><select
                         v-model="transition.transition_id"
+                        aria-label="Allowed destination"
                         required
                         class="control"
                     >
@@ -151,7 +197,7 @@ function act() {
                     </select></Field
                 >
                 <p
-                    v-if="selected?.requires_signoff"
+                    v-if="!core && selected?.requires_signoff"
                     class="rounded-md bg-muted p-3 text-xs"
                 >
                     A valid manual sign-off is required before this transition.
@@ -165,14 +211,35 @@ function act() {
                 >
                     <textarea
                         v-model="transition.reason"
+                        aria-label="Transition reason"
                         class="control"
                         :required="selected?.requires_reason"
                     />
                 </Field>
-                <template v-if="closing"
-                    ><Field label="Completion notes">
+                <template v-if="closing">
+                    <Field v-if="core" label="Resolution">
+                        <select
+                            v-model="transition.resolution_id"
+                            aria-label="Resolution"
+                            required
+                            class="control"
+                        >
+                            <option :value="null" disabled>
+                                Select resolution
+                            </option>
+                            <option
+                                v-for="item in activeResolutions"
+                                :key="item.id"
+                                :value="item.id"
+                            >
+                                {{ item.name }}
+                            </option>
+                        </select>
+                    </Field>
+                    <Field label="Completion notes">
                         <textarea
                             v-model="transition.completion_notes"
+                            aria-label="Completion notes"
                             class="control"
                             required
                             placeholder="What was completed and how was it checked?"
@@ -226,7 +293,9 @@ function act() {
                         transition.processing
                             ? 'Moving…'
                             : closing
-                              ? 'Close ticket'
+                              ? core
+                                  ? 'Resolve ticket'
+                                  : 'Close ticket'
                               : 'Move to selected stage'
                     }}</Button
                 >
@@ -238,6 +307,8 @@ function act() {
     </section>
     <section
         v-if="
+            !core &&
+            !archived &&
             capabilities['tickets.verify'] &&
             ['review', 'verification', 'pre_close'].includes(
                 ticket.stage.type,
@@ -298,7 +369,13 @@ function act() {
         <h2 class="flex items-center gap-2 text-sm font-semibold">
             <Zap class="size-4 text-amber-500" />Ticket actions
         </h2>
-        <p class="muted">Pause, resume, or revisit the work with a reason.</p>
+        <p class="muted">
+            {{
+                core
+                    ? 'Reopen resolved work with a reason.'
+                    : 'Pause, resume, or revisit the work with a reason.'
+            }}
+        </p>
         <FormSurface
             v-model:open="acting"
             title="Ticket actions"
@@ -309,7 +386,12 @@ function act() {
             <form class="space-y-4" @submit.prevent="act">
                 <FormErrors :errors="action.errors" :reload-url="base" /><Field
                     label="Action"
-                    ><select v-model="action.action" required class="control">
+                    ><select
+                        v-model="action.action"
+                        aria-label="Ticket action"
+                        required
+                        class="control"
+                    >
                         <option value="" disabled>Select action</option>
                         <option
                             v-for="item in actions"
@@ -322,6 +404,7 @@ function act() {
                 ><Field label="Reason">
                     <textarea
                         v-model="action.reason"
+                        aria-label="Action reason"
                         required
                         class="control"
                         placeholder="Explain why this action is needed"

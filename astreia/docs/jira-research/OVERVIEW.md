@@ -1,6 +1,6 @@
 # Jira-inspired ticketing research
 
-Status: independent research draft; no development phase is approved. Researched 2026-10-21, Asia/Singapore.
+Status: independent research; Phase 01 is authorized for new projects, with existing projects preserved under the [integration decision](../changes/2026-10-21-secure-core.md). Later phases remain unapproved. Researched 2026-10-21, Asia/Singapore.
 
 ## Purpose and reading order
 

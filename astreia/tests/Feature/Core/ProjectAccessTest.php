@@ -10,9 +10,7 @@ uses(RefreshDatabase::class);
 
 function coreProject(User $admin, string $code = 'HRIS'): Project
 {
-    test()->actingAs($admin)->post('/projects', ['code' => $code, 'name' => $code.' System'])->assertRedirect();
-
-    return Project::where('code', $code)->firstOrFail();
+    return legacyProjectFixture($admin, $code);
 }
 
 function coreMember(Project $project, User $user, array $keys): void

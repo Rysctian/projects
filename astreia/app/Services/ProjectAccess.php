@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\AuditLog;
 use App\Models\Permission;
 use App\Models\Project;
 use App\Models\User;
@@ -29,14 +30,19 @@ class ProjectAccess
     {
         Gate::forUser($actor)->authorize('project-permission', [$project, $key]);
         abort_unless($actor->hasProjectPermission($project, 'project.view'), 403);
-        abort_if($write && $project->status === 'archived' && ! $actor->is_system_admin, 403, 'Archived projects are read-only.');
+        abort_if($write && $project->status === 'archived' && ($project->isCore() || ! $actor->is_system_admin), 403, 'Archived projects are read-only.');
     }
 
     /** @return array<string, bool> */
     public static function capabilities(User $actor, Project $project): array
     {
-        return collect(self::KEYS)->mapWithKeys(fn ($key) => [$key => $actor->hasProjectPermission($project, $key)
-            && ($key === 'project.view' || $key === 'tickets.view' || $project->status !== 'archived' || $actor->is_system_admin)])->all();
+        $capabilities = collect(self::KEYS)->mapWithKeys(fn ($key) => [$key => $actor->hasProjectPermission($project, $key)
+            && $actor->hasProjectPermission($project, 'project.view')
+            && ($key === 'project.view' || $key === 'tickets.view' || $project->status !== 'archived' || ($actor->is_system_admin && ! $project->isCore()))])->all();
+        $capabilities['project.restore'] = $project->status === 'archived'
+            && $actor->hasProjectPermission($project, 'project.view') && $actor->hasProjectPermission($project, 'project.manage');
+
+        return $capabilities;
     }
 
     /** @param array<array-key, string> $keys */
@@ -59,7 +65,7 @@ class ProjectAccess
             $project = Project::lockForUpdate()->findOrFail($project->id);
             self::authorize($actor, $project, $permission);
             $result = $operation();
-            if (! $actor->is_system_admin) {
+            if ($project->isCore() || ! $actor->is_system_admin) {
                 self::ensureAccessManager($project);
             }
 
@@ -74,6 +80,34 @@ class ProjectAccess
         if (! $hasManager) {
             throw ValidationException::withMessages(['access' => 'Keep an active project member able to manage access, or ask a System Admin.']);
         }
+    }
+
+    public static function recover(User $actor, Project $project, User $target, string $reason): void
+    {
+        DB::transaction(function () use ($actor, $project, $target, $reason) {
+            abort_unless($actor->fresh()->hasGlobalPermission('projects.recover'), 403);
+            $project = Project::lockForUpdate()->findOrFail($project->id);
+            abort_unless($project->isCore() && $project->status !== 'archived', 403, 'Restore the project before recovering access.');
+            $target = User::lockForUpdate()->findOrFail($target->id);
+            abort_unless($target->is_active && ! $target->password_setup_required, 422, 'Select an active account with completed setup.');
+            $reason = trim($reason);
+            if ($reason === '' || mb_strlen($reason) > 10000) {
+                throw ValidationException::withMessages(['reason' => 'Provide a recovery reason of at most 10000 characters.']);
+            }
+            self::seedCatalog();
+            $member = $project->members()->firstOrNew(['user_id' => $target->id]);
+            $before = ['member' => $member->exists ? $member->toArray() : null, 'overrides' => $member->exists ? $member->overrides()->get()->toArray() : []];
+            $member->is_active = true;
+            $member->save();
+            $keys = ['project.view', 'members.manage', 'access.manage'];
+            foreach (Permission::where('scope', 'project')->whereIn('key', $keys)->get() as $permission) {
+                $member->overrides()->updateOrCreate(['permission_id' => $permission->id], ['effect' => 'allow']);
+            }
+            self::ensureAccessManager($project);
+            AuditLog::record($actor, $member, 'project.access_recovered', $before, [
+                'user_id' => $target->id, 'reason' => $reason, 'granted_permissions' => $keys,
+            ], $project->id);
+        });
     }
 
     public static function templates(Project $project): void

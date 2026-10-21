@@ -14,6 +14,7 @@ class WorkflowController extends Controller
 {
     public function index(Request $request, Project $project): Response
     {
+        abort_if($project->isCore(), 403, 'Workflow editing is not enabled for core projects.');
         ProjectAccess::authorize($request->user(), $project, 'workflows.manage', false);
 
         return Inertia::render('projects/Workflow', [

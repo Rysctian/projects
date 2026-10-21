@@ -13,4 +13,9 @@ class ProjectFactory extends Factory
     {
         return ['code' => strtoupper(fake()->unique()->bothify('PRJ###')), 'name' => fake()->company().' Workspace', 'description' => fake()->paragraph(), 'status' => 'active', 'created_by' => User::factory(), 'archived_at' => null, 'current_workflow_id' => null];
     }
+
+    public function core(): static
+    {
+        return $this->state(fn () => ['process_model' => 'core', 'timezone' => 'UTC', 'lock_version' => 1]);
+    }
 }

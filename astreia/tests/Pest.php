@@ -1,5 +1,9 @@
 <?php
 
+use App\Models\Project;
+use App\Models\User;
+use App\Services\ProjectAccess;
+use App\Services\WorkflowService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -47,4 +51,14 @@ expect()->extend('toBeOne', function () {
 function something()
 {
     // ..
+}
+
+function legacyProjectFixture(User $admin, string $code = 'HRIS'): Project
+{
+    test()->actingAs($admin);
+    $project = Project::factory()->create(['code' => $code, 'name' => $code.' System', 'created_by' => $admin->id]);
+    ProjectAccess::templates($project);
+    app(WorkflowService::class)->initialize($project, $admin);
+
+    return $project->refresh();
 }
